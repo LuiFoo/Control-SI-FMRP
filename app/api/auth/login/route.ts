@@ -52,31 +52,44 @@ export async function POST(request: NextRequest) {
     // Conectar ao MongoDB com retry para WiFi instável
     let client;
     try {
-      client = await getMongoClientWithRetry(3);
+      client = await getMongoClientWithRetry(5); // 5 tentativas para WiFi
     } catch (mongoError: any) {
-      console.error('Falha ao conectar ao MongoDB após todas as tentativas:', mongoError);
+      console.error('Falha ao conectar ao MongoDB:', mongoError?.message?.substring(0, 200));
       
       // Verificar tipo específico de erro
-      if (mongoError?.cause?.code === 'ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR') {
+      const errorCode = mongoError?.cause?.code;
+      const errorName = mongoError?.name;
+      const errorMessage = mongoError?.message || '';
+      
+      if (errorCode === 'ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR') {
         return NextResponse.json(
-          { error: 'Erro de conexão SSL/TLS com o banco de dados. Verifique sua conexão de rede.' },
+          { 
+            error: 'Erro de conexão SSL/TLS com o banco de dados. Tente novamente em alguns segundos.',
+            code: 'SSL_ERROR'
+          },
           { status: 503 }
         );
       }
       
       // Verificar se é timeout (comum em WiFi)
-      if (mongoError?.name === 'MongoServerSelectionError' || 
-          mongoError?.message?.includes('timeout') ||
-          mongoError?.message?.includes('ECONNREFUSED') ||
-          mongoError?.message?.includes('ENOTFOUND')) {
+      if (errorName === 'MongoServerSelectionError' || 
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('ECONNREFUSED') ||
+          errorMessage.includes('ENOTFOUND')) {
         return NextResponse.json(
-          { error: 'Timeout ao conectar com o banco de dados. Verifique sua conexão de rede (WiFi pode ter latência maior).' },
+          { 
+            error: 'Timeout ao conectar com o banco de dados. Verifique sua conexão de rede e tente novamente.',
+            code: 'TIMEOUT_ERROR'
+          },
           { status: 503 }
         );
       }
       
       return NextResponse.json(
-        { error: 'Erro ao conectar com o banco de dados. Verifique sua conexão de rede e tente novamente.' },
+        { 
+          error: 'Erro ao conectar com o banco de dados. Verifique sua conexão de rede e tente novamente.',
+          code: 'CONNECTION_ERROR'
+        },
         { status: 503 }
       );
     }
@@ -88,18 +101,11 @@ export async function POST(request: NextRequest) {
     const user = await collection.findOne({ username });
 
     if (!user) {
-      console.log('❌ Usuário não encontrado:', username);
       return NextResponse.json(
         { error: 'Credenciais inválidas' },
         { status: 401 }
       );
     }
-
-    console.log('👤 Usuário encontrado:', {
-      username: user.username,
-      permissao: user.permissao,
-      hasPasswordHash: !!user.passwordHash
-    });
 
     // VERIFICAR PERMISSÃO ANTES DE VERIFICAR SENHA
     // Verificar se tem permissão de login
@@ -114,14 +120,12 @@ export async function POST(request: NextRequest) {
     }
     
     if (!temPermissaoLogin) {
-      console.log('❌ Permissão de login negada. Permissão atual:', user.permissao);
+      console.error('Permissão de login negada para:', username);
       return NextResponse.json(
         { error: 'Acesso negado. Você não tem permissão para fazer login no sistema.' },
         { status: 403 }
       );
     }
-
-    console.log('✅ Permissão de login confirmada');
 
     // Verificar se o usuário tem passwordHash
     if (!user.passwordHash) {
@@ -133,18 +137,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar senha com bcrypt
-    console.log('🔐 Verificando senha...');
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
 
     if (!passwordMatch) {
-      console.log('❌ Senha incorreta');
       return NextResponse.json(
         { error: 'Credenciais inválidas' },
         { status: 401 }
       );
     }
-
-    console.log('✅ Senha correta');
 
     // Verificar se precisa gerar novo token baseado no campo logout
     // O campo logout armazena o limite de validade do token (data/hora até quando o token é válido)
@@ -156,28 +156,22 @@ export async function POST(request: NextRequest) {
     if (user.logout) {
       const dataLogout = new Date(user.logout);
       if (agora > dataLogout) {
-        console.log('⏰ Data limite do token passou, gerando novo token...');
         precisaGerarNovoToken = true;
       } else {
-        console.log('✅ Token ainda válido (não passou da data limite), verificando token do banco...');
         // Verificar se existe token no banco e se é válido
         const tokenDoBanco = (user.token as string) || '';
         if (!tokenDoBanco) {
-          console.log('⚠️ Token não encontrado no banco, gerando novo...');
           precisaGerarNovoToken = true;
         } else {
           // Verificar se o token do banco ainda é válido (não expirado)
           const payloadToken = verifyToken(tokenDoBanco);
           if (!payloadToken) {
-            console.log('⚠️ Token do banco expirado ou inválido, gerando novo...');
             precisaGerarNovoToken = true;
           } else {
             // Verificar se o token pertence ao mesmo usuário
             if (payloadToken.userId !== user._id.toString()) {
-              console.log('⚠️ Token do banco pertence a outro usuário, gerando novo...');
               precisaGerarNovoToken = true;
             } else {
-              console.log('✅ Token do banco válido, reutilizando...');
               token = tokenDoBanco;
             }
           }
@@ -185,7 +179,6 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Se não existe campo logout, é o primeiro login
-      console.log('📝 Campo logout não existe, gerando novo token...');
       precisaGerarNovoToken = true;
     }
 
@@ -200,18 +193,14 @@ export async function POST(request: NextRequest) {
       { _id: user._id },
       { $set: { inicial: inicial } }
     );
-    
-    console.log('✅ Inicial gerada para usuário:', inicial);
 
     // Gerar novo token se necessário
     if (precisaGerarNovoToken) {
-      console.log('🎫 Gerando novo token JWT...');
       token = generateToken({
         userId: user._id.toString(),
         username: user.username,
         permissao: user.permissao || 'user',
       });
-      console.log('✅ Novo token gerado com sucesso');
     }
 
     // Garantir que token foi definido
@@ -227,7 +216,6 @@ export async function POST(request: NextRequest) {
     const dataLimite = new Date(agora.getTime() + 2 * 60 * 60 * 1000); // 2 horas em milissegundos
 
     // Atualizar no MongoDB: salvar token e atualizar campo logout para 2 horas no futuro
-    console.log('💾 Salvando token e atualizando data limite (logout) no MongoDB...');
     await collection.updateOne(
       { _id: user._id },
       {
@@ -237,7 +225,6 @@ export async function POST(request: NextRequest) {
         }
       }
     );
-    console.log('✅ Token e data limite salvos no MongoDB');
 
     // Criar resposta com token no JSON e no cookie
     const response = NextResponse.json(
@@ -260,7 +247,7 @@ export async function POST(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7, // 7 dias
       path: '/',
     });
-
+    
     return response;
   } catch (error) {
     console.error('Erro no login:', error);

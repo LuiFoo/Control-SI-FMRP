@@ -10,6 +10,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [slowConnection, setSlowConnection] = useState(false);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,38 +26,75 @@ export default function Login() {
     }
 
     try {
-      console.log('🔐 Iniciando login...');
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username: email, password }),
-      });
-
-      console.log('📡 Resposta recebida:', response.status, response.statusText);
+      setSlowConnection(false);
+      
+      // Avisar se estiver demorando muito (após 10 segundos)
+      const slowWarning = setTimeout(() => {
+        if (loading) {
+          setSlowConnection(true);
+        }
+      }, 10000);
+      
+      // Criar AbortController para timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 45000); // 45 segundos de timeout (mais que o tempo máximo de tentativas)
+      
+      let response;
+      try {
+        response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username: email, password }),
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        clearTimeout(slowWarning);
+        setSlowConnection(false);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        clearTimeout(slowWarning);
+        setSlowConnection(false);
+        if (fetchError.name === 'AbortError') {
+          setError('Timeout: A conexão está demorando muito. Verifique sua conexão de rede e tente novamente.');
+          setLoading(false);
+          return;
+        }
+        throw fetchError;
+      }
 
       let data;
       try {
         data = await response.json();
-        console.log('📦 Dados recebidos:', { hasToken: !!data.token, hasError: !!data.error });
       } catch (jsonError) {
-        console.error('❌ Erro ao parsear JSON:', jsonError);
         setError('Erro ao processar resposta do servidor');
         setLoading(false);
         return;
       }
 
       if (!response.ok) {
-        console.error('❌ Erro na resposta:', response.status, data);
         // Tratar diferentes tipos de erro
         if (response.status === 403) {
           // Acesso negado - não é admin
           setError('Acesso negado. Apenas administradores podem acessar o sistema. Verifique se seu usuário tem permissão "admin" no banco de dados.');
+        } else if (response.status === 503) {
+          // Erro de conexão com banco de dados
+          const errorMsg = data.error || 'Erro ao conectar com o banco de dados';
+          if (errorMsg.includes('SSL') || errorMsg.includes('TLS')) {
+            setError('Erro de conexão SSL/TLS. Isso pode acontecer em conexões WiFi. Tente: 1) Conectar via cabo de rede, 2) Aguardar alguns segundos e tentar novamente, 3) Verificar sua conexão de internet.');
+          } else if (errorMsg.includes('Timeout')) {
+            setError('Timeout na conexão. WiFi pode ter latência maior. Tente: 1) Conectar via cabo de rede, 2) Aguardar alguns segundos e tentar novamente.');
+          } else {
+            setError(errorMsg + ' Tente novamente em alguns segundos.');
+          }
         } else if (data.error === 'Credenciais inválidas') {
           setError('Email ou senha incorretos. Verifique suas credenciais.');
         } else {
-          setError(data.error || 'Erro ao fazer login');
+          setError(data.error || 'Erro ao fazer login. Tente novamente.');
         }
         setLoading(false);
         return;
@@ -64,18 +102,13 @@ export default function Login() {
 
       // Verificar se o token foi retornado
       if (!data.token) {
-        console.error('❌ Token não recebido');
         setError('Erro: Token não recebido do servidor');
         setLoading(false);
         return;
       }
-
-      console.log('✅ Token recebido, salvando no localStorage...');
       
       // Salvar token no localStorage (para uso no cliente)
       localStorage.setItem('token', data.token);
-      
-      console.log('✅ Token salvo, redirecionando para /...');
       
       // Resetar loading
       setLoading(false);
@@ -84,8 +117,9 @@ export default function Login() {
       router.push('/');
     } catch (err) {
       console.error('Erro no login:', err);
-      setError('Erro ao conectar com o servidor');
+      setError('Erro ao conectar com o servidor. Verifique sua conexão de internet e tente novamente.');
       setLoading(false);
+      setSlowConnection(false);
     }
   };
 
@@ -113,20 +147,8 @@ export default function Login() {
               }}
               loading="eager"
               onError={(e) => {
-                console.error('❌ Erro ao carregar /background.png');
-                console.error('Tentando caminho alternativo...');
                 const img = e.currentTarget;
                 img.src = '/background.png?v=' + Date.now();
-                setTimeout(() => {
-                  if (!img.complete || img.naturalHeight === 0) {
-                    console.error('❌ Imagem ainda não carregou após tentativa alternativa');
-                    console.error('Verifique se o arquivo existe em: public/background.png');
-                  }
-                }, 2000);
-              }}
-              onLoad={(e) => {
-                console.log('✅ Imagem /background.png carregada com sucesso!');
-                console.log('Dimensões:', e.currentTarget.naturalWidth, 'x', e.currentTarget.naturalHeight);
               }}
             />
           </div>
@@ -154,6 +176,12 @@ export default function Login() {
                   </Link>
                 </div>
               )}
+            </div>
+          )}
+
+          {slowConnection && !error && (
+            <div className="mb-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-lg text-sm">
+              ⏳ A conexão está demorando mais que o normal. Isso pode acontecer em WiFi. Aguarde...
             </div>
           )}
 
@@ -228,10 +256,16 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full text-white py-3.5 rounded-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 mt-6 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full text-white py-3.5 rounded-lg font-semibold transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 mt-6 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               style={{ backgroundColor: '#09624b' }}
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading && (
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
+              {loading ? 'Conectando...' : 'Entrar'}
             </button>
           </form>
 
