@@ -190,22 +190,6 @@ export default function VerificacaoPage() {
       } else {
         alert('Erro ao salvar revisão');
       }
-
-      const response = await fetch('/api/estoque/revisoes', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(revisaoCompleta),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        router.push(`/estoque/verificacao/resumo?id=${data.revisaoId}`);
-      } else {
-        alert('Erro ao salvar revisão');
-      }
     } catch (error) {
       console.error('Erro ao finalizar revisão:', error);
       alert('Erro ao finalizar revisão');
