@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { getToken } from '@/lib/auth-client';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -26,7 +26,7 @@ interface Revisao {
   itens: ItemRevisao[];
 }
 
-export default function ResumoPage() {
+function ResumoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [revisao, setRevisao] = useState<Revisao | null>(null);
@@ -280,6 +280,20 @@ export default function ResumoPage() {
         </div>
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function ResumoPage() {
+  return (
+    <Suspense fallback={
+      <ProtectedRoute>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </ProtectedRoute>
+    }>
+      <ResumoContent />
+    </Suspense>
   );
 }
 
