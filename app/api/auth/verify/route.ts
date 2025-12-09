@@ -75,7 +75,6 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    console.log('✅ Token validado e data limite atualizada para usuário:', payload.username);
 
     // Verificar se é admin
     const isAdmin = payload.permissao === 'admin';

@@ -20,22 +20,16 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         const token = getToken();
         
         if (!token) {
-          console.log('❌ Sem token');
           if (isMounted) {
             router.push('/login');
           }
           return;
         }
-
-        console.log('🔍 Verificando autenticação...');
         
         // Verificar apenas se o token é válido (qualquer usuário autenticado pode acessar)
         const isValid = await verifyToken();
         
-        console.log('📊 Resultado da verificação:', isValid);
-        
         if (!isValid) {
-          console.log('❌ Token inválido, redirecionando...');
           if (isMounted) {
             // Remover token inválido
             removeToken();
@@ -45,12 +39,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
           return;
         }
 
-        console.log('✅ Autenticação confirmada, permitindo acesso');
         if (isMounted) {
           setIsAuthenticated(true);
         }
       } catch (error) {
-        console.error('❌ Erro ao verificar autenticação:', error);
+        console.error('Erro ao verificar autenticação:', error);
         if (isMounted) {
           removeToken();
           router.push('/login');
