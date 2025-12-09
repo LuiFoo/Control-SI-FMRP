@@ -1,4 +1,4 @@
-import { MongoClient } from 'mongodb';
+import { MongoClient, type ServerMonitoringMode } from 'mongodb';
 
 if (!process.env.MONGODB_URI) {
   throw new Error('Por favor, adicione a variável MONGODB_URI no arquivo .env.local');
@@ -13,7 +13,7 @@ const options: {
   retryWrites?: boolean;
   retryReads?: boolean;
   heartbeatFrequencyMS?: number;
-  serverMonitoringMode?: string;
+  serverMonitoringMode?: ServerMonitoringMode;
 } = {
   maxPoolSize: 10,
   // Aumentar timeouts para WiFi (que pode ter latência maior)
