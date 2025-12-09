@@ -1,221 +1,135 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { getToken } from '@/lib/auth-client';
+import { getToken, verifyEditarEstoquePermission } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Breadcrumb from '@/components/Breadcrumb';
 
-interface ItemEstoque {
+interface Revisao {
   _id: string;
-  nome: string;
-  categoria?: string;
-  quantidade: number;
-  unidade?: string;
-}
-
-interface ItemRevisao {
-  item_id: string;
-  nome_item: string;
-  sistema: number;
-  contado: number | null;
-  status: 'certo' | 'errado' | null;
+  mes: number;
+  ano: number;
+  data_fim: string;
+  usuario: string;
+  status: string;
+  itens: Array<{
+    status: 'certo' | 'errado';
+  }>;
 }
 
 export default function VerificacaoPage() {
   const router = useRouter();
-  const [itens, setItens] = useState<ItemEstoque[]>([]);
+  const [revisoes, setRevisoes] = useState<Revisao[]>([]);
   const [loading, setLoading] = useState(true);
-  const [itemAtualIndex, setItemAtualIndex] = useState(0);
-  const [quantidadeContada, setQuantidadeContada] = useState('');
-  const [revisao, setRevisao] = useState<ItemRevisao[]>([]);
-  const revisaoRef = useRef<ItemRevisao[]>([]);
-  const [dataInicio] = useState(new Date());
+  const [totalItens, setTotalItens] = useState(0);
+  const [hasEditarEstoque, setHasEditarEstoque] = useState(false);
 
   useEffect(() => {
-    carregarItens();
+    carregarDados();
+    verificarPermissao();
   }, []);
 
-  useEffect(() => {
-    // Atualizar quantidade contada quando mudar de item
-    const itemRevisaoAtual = revisao[itemAtualIndex];
-    if (itemRevisaoAtual && itemRevisaoAtual.contado !== null) {
-      setQuantidadeContada(itemRevisaoAtual.contado.toString());
-    } else {
-      setQuantidadeContada('');
-    }
-  }, [itemAtualIndex, revisao]);
+  const verificarPermissao = async () => {
+    const hasPermission = await verifyEditarEstoquePermission();
+    setHasEditarEstoque(hasPermission);
+  };
 
-  const carregarItens = async () => {
+  const carregarDados = async () => {
     try {
       setLoading(true);
       const token = getToken();
-      const response = await fetch('/api/estoque', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
+      
+      const [revisoesRes, itensRes] = await Promise.all([
+        fetch('/api/estoque/revisoes', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
+        fetch('/api/estoque', {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }),
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
-        const itensOrdenados = (data.itens || []).sort((a: ItemEstoque, b: ItemEstoque) => 
-          a.nome.localeCompare(b.nome)
-        );
-        setItens(itensOrdenados);
-        // Inicializar revisão com todos os itens
-        const revisaoInicial = itensOrdenados.map((item: ItemEstoque) => ({
-          item_id: item._id,
-          nome_item: item.nome,
-          sistema: item.quantidade,
-          contado: null,
-          status: null,
-        }));
-        setRevisao(revisaoInicial);
-        revisaoRef.current = revisaoInicial;
+      if (revisoesRes.ok) {
+        const data = await revisoesRes.json();
+        setRevisoes(data.revisoes || []);
+      }
+
+      if (itensRes.ok) {
+        const data = await itensRes.json();
+        setTotalItens(data.itens?.length || 0);
       }
     } catch (error) {
-      console.error('Erro ao carregar itens:', error);
+      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const itemAtual = itens[itemAtualIndex];
-  const itemRevisaoAtual = revisao[itemAtualIndex];
-  const progresso = ((itemAtualIndex + 1) / itens.length) * 100;
-  const itensConcluidos = revisao.filter(r => r.status !== null).length;
-
-  const handleQuantidadeChange = (value: string) => {
-    setQuantidadeContada(value);
+  const getEstatisticas = (revisao: Revisao) => {
+    const certos = revisao.itens.filter(i => i.status === 'certo').length;
+    const errados = revisao.itens.filter(i => i.status === 'errado').length;
+    return { certos, errados, total: revisao.itens.length };
   };
 
-  const handleEstaCerto = () => {
-    const contado = parseInt(quantidadeContada);
-    if (contado === itemAtual.quantidade) {
-      const novaRevisao = [...revisao];
-      const itemAtualizado = {
-        ...itemRevisaoAtual,
-        contado: contado,
-        status: 'certo' as const,
+  const calcularEstatisticasGerais = () => {
+    if (revisoes.length === 0) {
+      return {
+        totalRevisoes: 0,
+        totalItensConferidos: 0,
+        totalCertos: 0,
+        totalErrados: 0,
+        taxaAcerto: 0,
+        ultimaRevisao: null,
       };
-      novaRevisao[itemAtualIndex] = itemAtualizado;
-      console.log('Marcando como certo - item atualizado:', itemAtualizado);
-      console.log('Nova revisão completa:', novaRevisao);
-      setRevisao(novaRevisao);
-      revisaoRef.current = novaRevisao;
-      // Aguardar um pouco para garantir que o estado seja atualizado
-      setTimeout(() => {
-        avancarItem();
-      }, 100);
-    } else {
-      alert('A quantidade contada deve ser igual à quantidade no sistema para marcar como "Está certo".');
     }
-  };
 
-  const handleEstaErrado = () => {
-    const contado = parseInt(quantidadeContada) || 0;
-    const novaRevisao = [...revisao];
-    const itemAtualizado = {
-      ...itemRevisaoAtual,
-      contado: contado,
-      status: 'errado' as const,
-    };
-      novaRevisao[itemAtualIndex] = itemAtualizado;
-      console.log('Marcando como errado - item atualizado:', itemAtualizado);
-      console.log('Nova revisão completa:', novaRevisao);
-      setRevisao(novaRevisao);
-      revisaoRef.current = novaRevisao;
-      // Aguardar um pouco para garantir que o estado seja atualizado
-      setTimeout(() => {
-        avancarItem();
-      }, 100);
-  };
+    let totalItensConferidos = 0;
+    let totalCertos = 0;
+    let totalErrados = 0;
+    let ultimaRevisao = revisoes[0];
 
-  const avancarItem = () => {
-    setQuantidadeContada('');
-    if (itemAtualIndex < itens.length - 1) {
-      setItemAtualIndex(itemAtualIndex + 1);
-    } else {
-      // Finalizou todos os itens - usar setTimeout para garantir que o estado foi atualizado
-      setTimeout(() => {
-        finalizarRevisao();
-      }, 200);
-    }
-  };
-
-  const voltarItem = () => {
-    if (itemAtualIndex > 0) {
-      setItemAtualIndex(itemAtualIndex - 1);
-      const itemAnterior = revisao[itemAtualIndex - 1];
-      setQuantidadeContada(itemAnterior.contado?.toString() || '');
-    }
-  };
-
-  const finalizarRevisao = async () => {
-    try {
-      const token = getToken();
-      const agora = new Date();
-      const mes = agora.getMonth() + 1;
-      const ano = agora.getFullYear();
-
-      // Usar o ref para garantir que temos o estado mais recente
-      const revisaoAtual = revisaoRef.current.length > 0 ? revisaoRef.current : revisao;
+    revisoes.forEach((revisao) => {
+      const stats = getEstatisticas(revisao);
+      totalItensConferidos += stats.total;
+      totalCertos += stats.certos;
+      totalErrados += stats.errados;
       
-      // Filtrar apenas itens que foram revisados (têm status definido)
-      const itensRevisados = revisaoAtual.filter(item => item.status !== null && item.status !== undefined);
-      
-      console.log('Estado revisao antes de filtrar:', revisaoAtual);
-      console.log('Itens revisados (com status):', itensRevisados);
-      
-      const revisaoCompleta = {
-        mes,
-        ano,
-        data_inicio: dataInicio.toISOString(),
-        data_fim: agora.toISOString(),
-        status: 'finalizada',
-        itens: itensRevisados,
-      };
-
-      console.log('Enviando revisão:', JSON.stringify(revisaoCompleta, null, 2));
-
-      const response = await fetch('/api/estoque/revisoes', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(revisaoCompleta),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        router.push(`/estoque/verificacao/resumo?id=${data.revisaoId}`);
-      } else {
-        alert('Erro ao salvar revisão');
+      const dataRevisao = new Date(revisao.data_fim);
+      const dataUltima = new Date(ultimaRevisao.data_fim);
+      if (dataRevisao > dataUltima) {
+        ultimaRevisao = revisao;
       }
-    } catch (error) {
-      console.error('Erro ao finalizar revisão:', error);
-      alert('Erro ao finalizar revisão');
-    }
+    });
+
+    const taxaAcerto = totalItensConferidos > 0 
+      ? Math.round((totalCertos / totalItensConferidos) * 100) 
+      : 0;
+
+    return {
+      totalRevisoes: revisoes.length,
+      totalItensConferidos,
+      totalCertos,
+      totalErrados,
+      taxaAcerto,
+      ultimaRevisao,
+    };
   };
+
+  const mesNome = (mes: number) => {
+    return ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][mes - 1];
+  };
+
+  const stats = calcularEstatisticasGerais();
+  const revisoesRecentes = revisoes.slice(0, 5);
 
   if (loading) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <p className="text-gray-600">Carregando...</p>
-        </div>
-      </ProtectedRoute>
-    );
-  }
-
-  if (itens.length === 0) {
-    return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 pt-4">
-          <div className="max-w-7xl mx-auto px-6 py-8">
-            <Breadcrumb />
-            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-              <p className="text-gray-600">Nenhum item encontrado no estoque.</p>
-            </div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#09624b] mx-auto"></div>
+            <p className="mt-4 text-gray-600">Carregando...</p>
           </div>
         </div>
       </ProtectedRoute>
@@ -225,104 +139,130 @@ export default function VerificacaoPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50 pt-4">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           <Breadcrumb />
           
-          {/* Cabeçalho */}
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Verificação de Item por Item</h1>
-            <p className="text-sm text-gray-500">Item {itemAtualIndex + 1} de {itens.length}</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Verificação de Estoque</h1>
+            <p className="text-sm text-gray-500">Acompanhe as revisões e realize novas verificações de estoque</p>
           </div>
 
-          {/* Barra de Progresso */}
-          <div className="mb-6 bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">Progresso</span>
-              <span className="text-sm text-gray-600">{itensConcluidos} de {itens.length} concluídos</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className="bg-[#09624b] h-3 rounded-full transition-all duration-300"
-                style={{ width: `${progresso}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Card do Item */}
-          {itemAtual && (
-            <div className="bg-white rounded-lg border border-gray-200 p-8 mb-6">
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-2">{itemAtual.nome}</h2>
-                {itemAtual.categoria && (
-                  <p className="text-sm text-gray-600 mb-4">Categoria: {itemAtual.categoria}</p>
-                )}
-              </div>
-
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">Quantidade no Sistema</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {itemAtual.quantidade} {itemAtual.unidade || 'un'}
-                </p>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Quantidade Contada Fisicamente
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={quantidadeContada}
-                  onChange={(e) => handleQuantidadeChange(e.target.value)}
-                  className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#09624b]"
-                  placeholder="Digite a quantidade contada..."
-                />
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={handleEstaCerto}
-                  disabled={!quantidadeContada || parseInt(quantidadeContada) !== itemAtual.quantidade}
-                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
-                >
-                  <span>✓</span> Está certo
-                </button>
-                <button
-                  onClick={handleEstaErrado}
-                  disabled={!quantidadeContada}
-                  className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
-                >
-                  <span>✖</span> Está errado
-                </button>
-              </div>
+          {/* Botão para Iniciar Verificação */}
+          {hasEditarEstoque && (
+            <div className="mb-6">
+              <Link
+                href="/estoque/verificacao/iniciar"
+                className="inline-flex items-center px-6 py-3 bg-[#09624b] text-white rounded-lg hover:bg-[#0a7a5f] transition-colors font-medium text-base"
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Iniciar Nova Verificação
+              </Link>
             </div>
           )}
 
-          {/* Botões de Navegação */}
-          <div className="flex justify-between">
-            <button
-              onClick={voltarItem}
-              disabled={itemAtualIndex === 0}
-              className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              ← Anterior
-            </button>
-            <button
-              onClick={() => {
-                if (itemAtualIndex < itens.length - 1) {
-                  setItemAtualIndex(itemAtualIndex + 1);
-                  setQuantidadeContada('');
-                }
-              }}
-              disabled={itemAtualIndex >= itens.length - 1}
-              className="px-6 py-2 bg-[#09624b] text-white rounded-lg hover:bg-[#0a7a5f] disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              Próximo →
-            </button>
+          {/* Analytics Gerais */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <p className="text-sm text-gray-600 mb-1">Total de Revisões</p>
+              <p className="text-3xl font-bold text-gray-900">{stats.totalRevisoes}</p>
+            </div>
+            <div className="bg-green-50 rounded-lg border border-green-200 p-6">
+              <p className="text-sm text-green-700 mb-1">Itens Certos</p>
+              <p className="text-3xl font-bold text-green-800">{stats.totalCertos}</p>
+            </div>
+            <div className="bg-red-50 rounded-lg border border-red-200 p-6">
+              <p className="text-sm text-red-700 mb-1">Itens com Diferença</p>
+              <p className="text-3xl font-bold text-red-800">{stats.totalErrados}</p>
+            </div>
+            <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+              <p className="text-sm text-blue-700 mb-1">Taxa de Acerto</p>
+              <p className="text-3xl font-bold text-blue-800">{stats.taxaAcerto}%</p>
+            </div>
+          </div>
+
+          {/* Informações Adicionais */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <p className="text-sm text-gray-600 mb-1">Total de Itens no Estoque</p>
+              <p className="text-2xl font-bold text-gray-900">{totalItens}</p>
+            </div>
+            {stats.ultimaRevisao && (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <p className="text-sm text-gray-600 mb-1">Última Revisão</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {mesNome(stats.ultimaRevisao.mes)} / {stats.ultimaRevisao.ano}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {new Date(stats.ultimaRevisao.data_fim).toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Histórico Recente */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">Histórico de Revisões</h2>
+              <Link
+                href="/estoque/verificacao/historico"
+                className="text-sm text-[#09624b] hover:text-[#0a7a5f] font-medium"
+              >
+                Ver todas →
+              </Link>
+            </div>
+
+            {revisoesRecentes.length === 0 ? (
+              <div className="px-6 py-8 text-center text-gray-500">
+                <p>Nenhuma revisão encontrada.</p>
+                <p className="text-sm mt-2">Inicie uma nova verificação para começar.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Mês/Ano</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Certos</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Com Diferença</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Conferidos</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Data</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {revisoesRecentes.map((revisao) => {
+                      const revisaoStats = getEstatisticas(revisao);
+                      return (
+                        <tr key={revisao._id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 text-sm text-gray-900">
+                            {mesNome(revisao.mes)} / {revisao.ano}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-green-700 font-medium">{revisaoStats.certos}</td>
+                          <td className="px-6 py-4 text-sm text-red-700 font-medium">{revisaoStats.errados}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">{revisaoStats.total}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {new Date(revisao.data_fim).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => router.push(`/estoque/verificacao/visualizar?id=${revisao._id}`)}
+                              className="text-[#09624b] hover:text-[#0a7a5f] font-medium text-sm"
+                            >
+                              👁 Ver
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </ProtectedRoute>
   );
 }
-

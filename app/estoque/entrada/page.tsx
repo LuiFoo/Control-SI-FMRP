@@ -46,6 +46,8 @@ export default function EntradaPage() {
   const [novoItemCategoria, setNovoItemCategoria] = useState('');
   const [novoItemUnidade, setNovoItemUnidade] = useState('un');
   const [novoItemQuantidade, setNovoItemQuantidade] = useState(1);
+  const [novoItemQuantidadeMinima, setNovoItemQuantidadeMinima] = useState(0);
+  const [quantidadeMinima, setQuantidadeMinima] = useState<number | null>(null);
 
   useEffect(() => {
     carregarUsuario();
@@ -118,6 +120,7 @@ export default function EntradaPage() {
     setSearchTerm(item.nome);
     setMostrarLista(false);
     setQuantidade(1);
+    setQuantidadeMinima(item.quantidade_minima ?? null);
     setErros({});
   };
 
@@ -125,6 +128,7 @@ export default function EntradaPage() {
     setItemSelecionado(null);
     setSearchTerm('');
     setQuantidade(1);
+    setQuantidadeMinima(null);
     setObservacoes('');
     const now = new Date();
     const year = now.getFullYear();
@@ -149,6 +153,7 @@ export default function EntradaPage() {
     setNovoItemCategoria('');
     setNovoItemUnidade('un');
     setNovoItemQuantidade(1);
+    setNovoItemQuantidadeMinima(0);
   };
 
   const fecharCriarNovo = () => {
@@ -190,6 +195,7 @@ export default function EntradaPage() {
             categoria: novoItemCategoria.trim(),
             unidade: novoItemUnidade,
             quantidade: Number(novoItemQuantidade),
+            quantidade_minima: Number(novoItemQuantidadeMinima) || 0,
             observacoes: observacoes.trim() || null,
           }),
         });
@@ -215,6 +221,7 @@ export default function EntradaPage() {
             tipo: 'entrada',
             itemId: itemSelecionado._id,
             quantidade: Number(quantidade),
+            quantidade_minima: quantidadeMinima !== null ? Number(quantidadeMinima) : undefined,
             observacoes: observacoes.trim() || null,
             data: dataHora ? new Date(dataHora).toISOString() : new Date().toISOString(),
           }),
@@ -437,25 +444,43 @@ export default function EntradaPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Quantidade Inicial *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={novoItemQuantidade}
-                      onChange={(e) => {
-                        const valor = e.target.value === '' ? 1 : Math.floor(Number(e.target.value));
-                        setNovoItemQuantidade(valor > 0 ? valor : 1);
-                        setErros({ ...erros, novoItemQuantidade: '' });
-                      }}
-                      className={`w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-1 focus:ring-[#09624b] focus:border-[#09624b] ${
-                        erros.novoItemQuantidade ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                    />
-                    {erros.novoItemQuantidade && (
-                      <p className="mt-1 text-xs text-red-600">{erros.novoItemQuantidade}</p>
-                    )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Quantidade Inicial *</label>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={novoItemQuantidade}
+                        onChange={(e) => {
+                          const valor = e.target.value === '' ? 1 : Math.floor(Number(e.target.value));
+                          setNovoItemQuantidade(valor > 0 ? valor : 1);
+                          setErros({ ...erros, novoItemQuantidade: '' });
+                        }}
+                        className={`w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-1 focus:ring-[#09624b] focus:border-[#09624b] ${
+                          erros.novoItemQuantidade ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      />
+                      {erros.novoItemQuantidade && (
+                        <p className="mt-1 text-xs text-red-600">{erros.novoItemQuantidade}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Quantidade Mínima</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={novoItemQuantidadeMinima}
+                        onChange={(e) => {
+                          const valor = e.target.value === '' ? 0 : Math.floor(Number(e.target.value));
+                          setNovoItemQuantidadeMinima(valor >= 0 ? valor : 0);
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#09624b] focus:border-[#09624b]"
+                        placeholder="0"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Alerta quando estoque estiver baixo</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -463,10 +488,11 @@ export default function EntradaPage() {
 
             {/* Quantidade */}
             {!mostrarCriarNovo && itemSelecionado && (
-              <div className="bg-white rounded-lg border border-gray-200 p-5">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Quantidade de Entrada *
-                </label>
+              <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Quantidade de Entrada *
+                  </label>
                 <div className="flex items-center gap-3">
                   <input
                     type="number"
@@ -522,12 +548,47 @@ export default function EntradaPage() {
                   </button>
                 </div>
 
-                {/* Estoque Após Entrada */}
-                {quantidade > 0 && (
-                  <div className="mt-3 text-xs text-gray-600">
-                    Estoque após entrada: <strong className="text-gray-900">{itemSelecionado.quantidade + quantidade} {itemSelecionado.unidade || 'un'}</strong>
+                  {/* Estoque Após Entrada */}
+                  {quantidade > 0 && (
+                    <div className="mt-3 text-xs text-gray-600">
+                      Estoque após entrada: <strong className="text-gray-900">{itemSelecionado.quantidade + quantidade} {itemSelecionado.unidade || 'un'}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quantidade Mínima */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Quantidade Mínima (Alerta de Estoque Baixo)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={quantidadeMinima ?? ''}
+                      onChange={(e) => {
+                        const valor = e.target.value === '' ? null : Math.floor(Number(e.target.value));
+                        setQuantidadeMinima(valor !== null && valor >= 0 ? valor : null);
+                      }}
+                      className="flex-1 px-4 py-2.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#09624b] focus:border-[#09624b]"
+                      placeholder="Ex: 10"
+                    />
+                    <span className="text-sm text-gray-600 min-w-[60px]">
+                      {itemSelecionado.unidade || 'un'}
+                    </span>
                   </div>
-                )}
+                  <p className="mt-2 text-xs text-gray-500">
+                    {quantidadeMinima !== null 
+                      ? `O sistema alertará quando o estoque estiver em ${quantidadeMinima} ${itemSelecionado.unidade || 'un'} ou menos.`
+                      : 'Deixe em branco para não definir alerta de estoque baixo.'}
+                  </p>
+                  {itemSelecionado.quantidade_minima !== undefined && itemSelecionado.quantidade_minima !== null && (
+                    <p className="mt-1 text-xs text-gray-400">
+                      Valor atual: {itemSelecionado.quantidade_minima} {itemSelecionado.unidade || 'un'}
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 

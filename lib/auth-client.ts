@@ -68,6 +68,30 @@ export async function verifyAdminPermission(): Promise<boolean> {
   }
 }
 
+export async function verifyEditarEstoquePermission(): Promise<boolean> {
+  const token = getToken();
+  if (!token) {
+    return false;
+  }
+
+  try {
+    const response = await fetch('/api/auth/verify-permission', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const data = await response.json();
+    return data.hasEditarEstoque === true;
+  } catch (error) {
+    return false;
+  }
+}
+
 export function validateEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@fmrp\.usp\.br$/;
   return emailRegex.test(email);

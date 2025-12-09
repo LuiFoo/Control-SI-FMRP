@@ -150,12 +150,20 @@ export default function DashboardEstoque() {
             <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard de Estoque</h1>
             <p className="text-sm text-gray-500">Visão geral e controle do seu inventário</p>
           </div>
-          <Link
-            href="/estoque/relatorios"
-            className="px-4 py-2 bg-[#09624b] text-white rounded-md text-sm font-medium hover:bg-[#0a7a5f] transition-colors"
-          >
-            Relatórios
-          </Link>
+          <div className="flex gap-3">
+            <Link
+              href="/estoque/verificacao"
+              className="px-4 py-2 bg-[#09624b] text-white rounded-md text-sm font-medium hover:bg-[#0a7a5f] transition-colors"
+            >
+              Verificação
+            </Link>
+            <Link
+              href="/estoque/relatorios"
+              className="px-4 py-2 bg-[#09624b] text-white rounded-md text-sm font-medium hover:bg-[#0a7a5f] transition-colors"
+            >
+              Relatórios
+            </Link>
+          </div>
         </div>
 
         {/* Busca Global */}

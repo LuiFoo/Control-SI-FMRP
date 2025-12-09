@@ -42,6 +42,43 @@ export function isAdmin(payload: TokenPayload | null): boolean {
 }
 
 /**
+ * Verifica se o usuário tem permissão de login
+ * Busca no banco de dados para verificar a estrutura completa de permissões
+ */
+export async function hasLoginPermission(userId: string): Promise<boolean> {
+  try {
+    const { default: clientPromise } = await import('@/lib/mongodb');
+    const { ObjectId } = await import('mongodb');
+    const client = await clientPromise;
+    const db = client.db('fmrp');
+    const collection = db.collection('usuarios');
+    
+    const user = await collection.findOne({ _id: new ObjectId(userId) });
+    
+    if (!user) {
+      return false;
+    }
+    
+    // Verificar se permissao é um objeto
+    if (typeof user.permissao === 'object' && user.permissao !== null) {
+      const permissao = user.permissao as any;
+      // Verificar se tem login === true
+      return permissao.login === true;
+    }
+    
+    // Se permissao é string, verificar se é admin (compatibilidade com versão antiga)
+    if (typeof user.permissao === 'string') {
+      return user.permissao === 'admin';
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Erro ao verificar permissão login:', error);
+    return false;
+  }
+}
+
+/**
  * Verifica se o usuário tem permissão de editarEstoque E login
  * Busca no banco de dados para verificar a estrutura completa de permissões
  */

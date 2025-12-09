@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
-import { verifyToken, hasEstoqueEdicaoPermission } from '@/lib/auth';
+import { verifyToken, hasEstoqueEdicaoPermission, hasLoginPermission } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,17 +54,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
     }
 
-    // Verificar se tem permissão editarEstoque E login
-    const hasPermission = await hasEstoqueEdicaoPermission(payload.userId);
-    if (!hasPermission) {
-      return NextResponse.json(
-        { error: 'Você não possui permissão para adicionar ou remover itens do estoque.' },
-        { status: 403 }
-      );
-    }
-
     const body = await request.json();
-    const { tipo, itemId, quantidade, responsavel, setor, observacoes, data, numeroChamado } = body;
+    const { tipo, itemId, quantidade, quantidade_minima, responsavel, setor, observacoes, data, numeroChamado } = body;
 
     if (!tipo || !itemId || !quantidade) {
       return NextResponse.json(
@@ -78,6 +69,27 @@ export async function POST(request: NextRequest) {
         { error: 'Tipo deve ser "entrada" ou "saida"' },
         { status: 400 }
       );
+    }
+
+    // Verificar permissões baseado no tipo
+    if (tipo === 'entrada') {
+      // Para ENTRADA: precisa de editarEstoque: true E login: true
+      const hasPermission = await hasEstoqueEdicaoPermission(payload.userId);
+      if (!hasPermission) {
+        return NextResponse.json(
+          { error: 'Você não possui permissão para adicionar itens ao estoque. É necessário ter permissão "editarEstoque" e "login".' },
+          { status: 403 }
+        );
+      }
+    } else if (tipo === 'saida') {
+      // Para SAÍDA: precisa apenas de login: true
+      const hasLogin = await hasLoginPermission(payload.userId);
+      if (!hasLogin) {
+        return NextResponse.json(
+          { error: 'Você não possui permissão para remover itens do estoque. É necessário ter permissão "login".' },
+          { status: 403 }
+        );
+      }
     }
 
     const client = await clientPromise;
@@ -105,9 +117,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Preparar atualização
+    const updateData: any = { quantidade: novaQuantidade };
+    
+    // Se for entrada e foi fornecida quantidade_minima, atualizar também
+    if (tipo === 'entrada' && quantidade_minima !== undefined && quantidade_minima !== null) {
+      updateData.quantidade_minima = Number(quantidade_minima);
+    }
+
     await estoqueCollection.updateOne(
       { _id: new ObjectId(itemId) },
-      { $set: { quantidade: novaQuantidade } }
+      { $set: updateData }
     );
 
     // Criar registro de movimentação

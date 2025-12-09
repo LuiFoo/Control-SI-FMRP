@@ -71,7 +71,9 @@ function ListaContent() {
 
     // Filtro de status
     if (filter === 'baixo') {
-      return item.quantidade_minima && item.quantidade <= item.quantidade_minima;
+      return item.quantidade_minima !== undefined && 
+             item.quantidade_minima !== null && 
+             item.quantidade <= item.quantidade_minima;
     }
     if (filter === 'zerado') {
       return item.quantidade === 0;
@@ -95,17 +97,9 @@ function ListaContent() {
     <div className="min-h-screen bg-gray-50 pt-4">
       <div className="max-w-7xl mx-auto px-6 py-8">
         <Breadcrumb />
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Estoque Atual</h1>
-            <p className="text-sm text-gray-500">Lista completa de equipamentos em estoque</p>
-          </div>
-          <Link
-            href="/estoque/verificacao"
-            className="px-4 py-2 bg-[#09624b] text-white rounded-lg hover:bg-[#0a7a5f] transition-colors font-medium"
-          >
-            Verificação de Item por Item
-          </Link>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Estoque Atual</h1>
+          <p className="text-sm text-gray-500">Lista completa de equipamentos em estoque</p>
         </div>
 
           {/* Filtros */}
@@ -142,6 +136,7 @@ function ListaContent() {
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Nome</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Quantidade</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Mínimo</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Unidade</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Categoria</th>
                     <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Localização</th>
@@ -151,13 +146,13 @@ function ListaContent() {
                 <tbody className="divide-y divide-gray-200">
                   {itensFiltrados.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                         Nenhum item encontrado
                       </td>
                     </tr>
                   ) : (
                     itensFiltrados.map((item) => {
-                      const isBaixoEstoque = item.quantidade_minima && item.quantidade <= item.quantidade_minima;
+                      const isBaixoEstoque = item.quantidade_minima !== undefined && item.quantidade_minima !== null && item.quantidade <= item.quantidade_minima;
                       const isZerado = item.quantidade === 0;
                       
                       return (
@@ -168,7 +163,12 @@ function ListaContent() {
                               <div className="text-sm text-gray-500">{item.descricao}</div>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-sm text-gray-900">{item.quantidade}</td>
+                          <td className="px-6 py-4 text-sm text-gray-900 font-medium">{item.quantidade}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {item.quantidade_minima !== undefined && item.quantidade_minima !== null 
+                              ? item.quantidade_minima 
+                              : '-'}
+                          </td>
                           <td className="px-6 py-4 text-sm text-gray-600">{item.unidade}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{item.categoria || '-'}</td>
                           <td className="px-6 py-4 text-sm text-gray-600">{item.localizacao || '-'}</td>

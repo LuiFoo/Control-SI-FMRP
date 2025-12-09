@@ -77,15 +77,24 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    console.log('✅ Permissão verificada e data limite atualizada para usuário:', payload.username);
-
-    // Verificar se é admin
-    const isAdmin = payload.permissao === 'admin';
+    // Verificar permissões
+    let isAdmin = false;
+    let hasEditarEstoque = false;
+    
+    if (typeof user.permissao === 'object' && user.permissao !== null) {
+      const permissao = user.permissao as any;
+      isAdmin = permissao.login === true && permissao.editarEstoque === true; // Admin tem ambas
+      hasEditarEstoque = permissao.editarEstoque === true;
+    } else if (typeof user.permissao === 'string') {
+      isAdmin = user.permissao === 'admin';
+      hasEditarEstoque = user.permissao === 'admin';
+    }
 
     return NextResponse.json(
       { 
         valid: true,
         isAdmin: isAdmin,
+        hasEditarEstoque: hasEditarEstoque,
         user: {
           id: payload.userId,
           username: payload.username,

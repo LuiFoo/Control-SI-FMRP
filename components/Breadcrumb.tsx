@@ -20,6 +20,7 @@ export default function Breadcrumb() {
     '/estoque/historico': 'Histórico',
     '/estoque/relatorios': 'Relatórios',
     '/estoque/verificacao': 'Verificação',
+    '/estoque/verificacao/iniciar': 'Iniciar Verificação',
     '/estoque/verificacao/resumo': 'Resumo',
     '/estoque/verificacao/historico': 'Histórico de Revisões',
     '/estoque/verificacao/visualizar': 'Visualizar Revisão',
@@ -36,6 +37,16 @@ export default function Breadcrumb() {
       breadcrumbs.push({ label: 'Estoque', href: '/estoque' });
     } else if (pathname.startsWith('/estoque/')) {
       breadcrumbs.push({ label: 'Estoque', href: '/estoque' });
+      
+      // Adicionar "Lista" apenas para resumo (que vem da lista)
+      if (pathname === '/estoque/verificacao/resumo') {
+        breadcrumbs.push({ label: 'Lista', href: '/estoque/lista' });
+      }
+      
+      // Adicionar "Verificação" antes de todas as sub-rotas de verificação
+      if (pathname.startsWith('/estoque/verificacao/') && pathname !== '/estoque/verificacao') {
+        breadcrumbs.push({ label: 'Verificação', href: '/estoque/verificacao' });
+      }
       
       const currentLabel = routeLabels[pathname];
       if (currentLabel && pathname !== '/estoque') {

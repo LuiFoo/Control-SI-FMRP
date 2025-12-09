@@ -19,17 +19,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
     }
 
-    // Verificar se tem permissão editarEstoque E login
+    // Verificar se tem permissão editarEstoque E login (necessário para criar novo item)
     const hasPermission = await hasEstoqueEdicaoPermission(payload.userId);
     if (!hasPermission) {
       return NextResponse.json(
-        { error: 'Você não possui permissão para adicionar ou remover itens do estoque.' },
+        { error: 'Você não possui permissão para criar novos itens no estoque. É necessário ter permissão "editarEstoque" e "login".' },
         { status: 403 }
       );
     }
 
     const body = await request.json();
-    const { nome, categoria, unidade, quantidade, observacoes } = body;
+    const { nome, categoria, unidade, quantidade, quantidade_minima, observacoes } = body;
 
     // Validações
     if (!nome || !nome.trim()) {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       nome: nome.trim(),
       categoria: categoria.trim(),
       quantidade: quantidade,
-      quantidade_minima: 0,
+      quantidade_minima: quantidade_minima !== undefined && quantidade_minima !== null ? Number(quantidade_minima) : 0,
       unidade: unidade || 'un',
       descricao: '',
       fornecedor: '',
