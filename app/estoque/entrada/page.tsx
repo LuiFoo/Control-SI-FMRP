@@ -11,6 +11,7 @@ interface ItemEstoque {
   _id: string;
   nome: string;
   quantidade: number;
+  quantidade_minima?: number;
   categoria?: string;
   unidade?: string;
   descricao?: string;
