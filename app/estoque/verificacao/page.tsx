@@ -38,12 +38,13 @@ export default function VerificacaoPage() {
 
   useEffect(() => {
     // Atualizar quantidade contada quando mudar de item
+    const itemRevisaoAtual = revisao[itemAtualIndex];
     if (itemRevisaoAtual && itemRevisaoAtual.contado !== null) {
       setQuantidadeContada(itemRevisaoAtual.contado.toString());
     } else {
       setQuantidadeContada('');
     }
-  }, [itemAtualIndex, itemRevisaoAtual]);
+  }, [itemAtualIndex, revisao]);
 
   const carregarItens = async () => {
     try {
