@@ -5,6 +5,9 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET não está definido nas variáveis de ambiente. Configure JWT_SECRET no arquivo .env.local');
 }
 
+// Type assertion: após a verificação acima, JWT_SECRET é garantidamente uma string
+const JWT_SECRET_STRING: string = JWT_SECRET;
+
 export interface TokenPayload {
   userId: string;
   username: string;
@@ -12,14 +15,14 @@ export interface TokenPayload {
 }
 
 export function generateToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, JWT_SECRET_STRING, {
     expiresIn: '7d', // Token expira em 7 dias
   });
 }
 
 export function verifyToken(token: string): TokenPayload | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    const decoded = jwt.verify(token, JWT_SECRET_STRING) as TokenPayload;
     return decoded;
   } catch (error) {
     return null;
