@@ -49,11 +49,14 @@ export async function POST(request: NextRequest) {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Inserir usuário com permissão padrão "user"
+    // Inserir usuário com permissão padrão (objeto com login e editarEstoque false)
     const result = await collection.insertOne({
       username,
       passwordHash,
-      permissao: 'user', // Permissão padrão para novos usuários
+      permissao: {
+        login: false,
+        editarEstoque: false
+      }, // Permissão padrão para novos usuários
     });
 
     return NextResponse.json(
