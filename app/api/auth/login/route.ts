@@ -112,8 +112,14 @@ export async function POST(request: NextRequest) {
     let temPermissaoLogin = false;
     
     if (typeof user.permissao === 'object' && user.permissao !== null) {
-      // Nova estrutura: permissao.login === true
-      temPermissaoLogin = (user.permissao as any).login === true;
+      const permissao = user.permissao as { login?: boolean; isAdmin?: boolean };
+      // Se for admin master, tem permissão de login
+      if (permissao.isAdmin === true) {
+        temPermissaoLogin = true;
+      } else {
+        // Nova estrutura: permissao.login === true
+        temPermissaoLogin = permissao.login === true;
+      }
     } else if (typeof user.permissao === 'string') {
       // Estrutura antiga: permissao === 'admin' (compatibilidade)
       temPermissaoLogin = user.permissao === 'admin';
@@ -236,6 +242,17 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // Garantir estrutura de permissão
+    let permissao = user.permissao;
+    if (typeof permissao !== 'object' || permissao === null) {
+      permissao = { login: false, editarEstoque: false, isAdmin: false };
+    } else {
+      // Garantir que isAdmin existe no objeto
+      if (!('isAdmin' in permissao)) {
+        permissao = { ...permissao, isAdmin: false };
+      }
+    }
+
     // Criar resposta com token no JSON e no cookie
     const response = NextResponse.json(
       { 
@@ -243,7 +260,7 @@ export async function POST(request: NextRequest) {
         user: {
           id: user._id.toString(),
           username: user.username,
-          permissao: user.permissao || { login: false, editarEstoque: false },
+          permissao: permissao,
           inicial: inicial,
         }
       },

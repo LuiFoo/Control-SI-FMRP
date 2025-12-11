@@ -50,7 +50,19 @@ export default function DashboardEstoque() {
   const [menuAberto, setMenuAberto] = useState(false);
 
   useEffect(() => {
-    carregarDados();
+    let isMounted = true;
+
+    const loadData = async () => {
+      if (isMounted) {
+        await carregarDados();
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const carregarDados = async () => {

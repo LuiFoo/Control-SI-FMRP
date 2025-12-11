@@ -6,7 +6,24 @@ import { validatePassword, validateEmailLength } from '@/lib/validations';
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Formato JSON inválido' },
+        { status: 400 }
+      );
+    }
+
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json(
+        { error: 'Corpo da requisição inválido' },
+        { status: 400 }
+      );
+    }
+
+    const { username, password } = body;
 
     // Validação básica
     if (!username || !password) {
@@ -60,14 +77,15 @@ export async function POST(request: NextRequest) {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Inserir usuário com permissão padrão (objeto com login e editarEstoque false)
+    // Inserir usuário com permissão padrão (objeto com login, editarEstoque e isAdmin false)
     const result = await collection.insertOne({
       username,
       passwordHash,
       permissao: {
         login: false,
-        editarEstoque: false
-      }, // Permissão padrão para novos usuários
+        editarEstoque: false,
+        isAdmin: false // Administrador master (apenas alguns usuários terão true)
+      }, // Permissão padrão para novos usuários (todas false)
     });
 
     return NextResponse.json(

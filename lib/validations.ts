@@ -36,7 +36,7 @@ export function validateStringLength(
  * Valida número
  */
 export function validateNumber(
-  value: any,
+  value: unknown,
   fieldName: string,
   min: number = 0,
   max: number = Number.MAX_SAFE_INTEGER,
@@ -71,7 +71,7 @@ export function validateNumber(
  * Valida data
  */
 export function validateDate(
-  value: any,
+  value: unknown,
   fieldName: string
 ): { valid: boolean; error?: string; value?: Date } {
   if (!value) {
@@ -90,7 +90,7 @@ export function validateDate(
 /**
  * Valida mês (1-12)
  */
-export function validateMonth(month: any): { valid: boolean; error?: string; value?: number } {
+export function validateMonth(month: unknown): { valid: boolean; error?: string; value?: number } {
   const validation = validateNumber(month, 'Mês', 1, 12);
   if (!validation.valid) {
     return validation;
@@ -107,7 +107,7 @@ export function validateMonth(month: any): { valid: boolean; error?: string; val
 /**
  * Valida ano (1900-2100)
  */
-export function validateYear(year: any): { valid: boolean; error?: string; value?: number } {
+export function validateYear(year: unknown): { valid: boolean; error?: string; value?: number } {
   const validation = validateNumber(year, 'Ano', 1900, 2100);
   if (!validation.valid) {
     return validation;

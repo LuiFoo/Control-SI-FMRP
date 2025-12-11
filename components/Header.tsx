@@ -9,7 +9,7 @@ import { useState, useEffect, useRef } from 'react';
 interface UserData {
   id: string;
   username: string;
-  permissao: string | { login?: boolean; editarEstoque?: boolean };
+  permissao: string | { login?: boolean; editarEstoque?: boolean; isAdmin?: boolean };
   inicial?: string;
 }
 
@@ -24,11 +24,17 @@ export default function Header() {
 
   // Carregar dados do usuário
   useEffect(() => {
-    const loadUser = async () => {
+    let isMounted = true;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const loadUser = async (retry = false) => {
       try {
         const token = getToken();
         if (!token) {
-          console.warn('Token não encontrado no Header');
+          if (isMounted) {
+            setUser(null);
+          }
           return;
         }
 
@@ -36,26 +42,77 @@ export default function Header() {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
+          cache: 'no-store', // Sempre buscar dados atualizados
         });
 
         if (response.ok) {
           const data = await response.json();
-          if (data.user) {
+          if (data.user && isMounted) {
             setUser(data.user);
-          } else {
+          } else if (isMounted) {
             console.error('Resposta sem dados do usuário:', data);
+            // Tentar novamente se não tiver dados
+            if (retryCount < maxRetries && !retry) {
+              retryCount++;
+              setTimeout(() => loadUser(true), 500);
+            }
           }
         } else {
           const errorData = await response.json().catch(() => ({}));
           console.error('Erro ao buscar usuário:', response.status, errorData);
+          
+          // Se a resposta indicar que deve deslogar, deslogar automaticamente
+          if (errorData.shouldLogout) {
+            if (isMounted) {
+              removeToken();
+              router.push('/login');
+            }
+            return;
+          }
+
+          // Tentar novamente em caso de erro temporário
+          if (retryCount < maxRetries && !retry && response.status >= 500) {
+            retryCount++;
+            setTimeout(() => loadUser(true), 1000);
+          }
         }
       } catch (error) {
         console.error('Erro ao carregar usuário:', error);
+        // Tentar novamente em caso de erro de rede
+        if (retryCount < maxRetries && !retry && isMounted) {
+          retryCount++;
+          setTimeout(() => loadUser(true), 1000);
+        }
       }
     };
 
+    // Carregar imediatamente
     loadUser();
-  }, []);
+
+    // Recarregar após um pequeno delay para garantir que o token esteja disponível após login
+    const timeoutId = setTimeout(() => {
+      if (isMounted) {
+        const token = getToken();
+        if (token) {
+          loadUser();
+        }
+      }
+    }, 300);
+
+    // Recarregar quando pathname mudar (após login/navegação)
+    // Se não tiver usuário carregado e tiver token, tentar carregar novamente
+    const pathnameTimeout = setTimeout(() => {
+      if (isMounted && getToken()) {
+        loadUser();
+      }
+    }, 500);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      clearTimeout(pathnameTimeout);
+    };
+  }, [pathname, router]); // Recarregar quando pathname mudar (após login/navegação)
 
   // Animação de digitação
   useEffect(() => {
@@ -170,11 +227,18 @@ export default function Header() {
             >
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium text-gray-900">
-                  {user?.username?.split('@')[0] || 'Usuário'}
+                  {user?.username 
+                    ? (user.username.includes('@') ? user.username.split('@')[0] : user.username)
+                    : 'Carregando...'}
                 </p>
               </div>
               <div className="h-9 w-9 rounded-full bg-[#09624b] flex items-center justify-center text-white text-sm font-medium">
-                {user?.inicial || user?.username?.[0]?.toUpperCase() || '?'}
+                {user?.inicial 
+                  || (user?.username 
+                    ? (user.username.includes('@') 
+                        ? user.username.split('@')[0][0]?.toUpperCase() 
+                        : user.username[0]?.toUpperCase())
+                    : '?')}
               </div>
               <svg 
                 className={`w-4 h-4 text-gray-600 transition-transform ${showMenu ? 'rotate-180' : ''}`}

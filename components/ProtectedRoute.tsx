@@ -26,16 +26,14 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
           return;
         }
         
-        // Verificar apenas se o token é válido (qualquer usuário autenticado pode acessar)
+        // Verificar se o token é válido E se o usuário tem permissão de login
+        // O verifyToken() já verifica a permissão de login e desloga automaticamente se login !== true
+        // Ele também redireciona automaticamente, então não precisamos fazer nada aqui se retornar false
         const isValid = await verifyToken();
         
         if (!isValid) {
-          if (isMounted) {
-            // Remover token inválido
-            removeToken();
-            // Redirecionar para login
-            router.push('/login');
-          }
+          // verifyToken() já removeu o token e redirecionou, apenas retornar
+          // Não fazer nada adicional para evitar redirecionamentos duplos
           return;
         }
 

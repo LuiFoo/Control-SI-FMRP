@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
-import { verifyToken, hasEstoqueEdicaoPermission } from '@/lib/auth';
 import { isValidObjectId } from '@/lib/utils';
 import { validateStringLength, validateNumber } from '@/lib/validations';
+import { verifyLoginPermission, verifyEditarEstoquePermission } from '@/lib/auth-middleware';
 
 // GET - Buscar item específico
 export async function GET(
@@ -21,25 +21,10 @@ export async function GET(
       );
     }
     
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Token não fornecido' },
-        { status: 401 }
-      );
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      );
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
     // Qualquer usuário autenticado pode visualizar itens do estoque
@@ -87,29 +72,14 @@ export async function PUT(
   try {
     const { id } = await params;
     
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Token não fornecido' },
-        { status: 401 }
-      );
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      );
-    }
-
-    // Verificar se tem permissão editarEstoque E login
-    const hasPermission = await hasEstoqueEdicaoPermission(payload.userId);
+    // Verificar se tem permissão editarEstoque (não desloga, apenas bloqueia)
+    const hasPermission = await verifyEditarEstoquePermission(loginCheck.userId!);
     if (!hasPermission) {
       return NextResponse.json(
         { error: 'Você não possui permissão para adicionar ou remover itens do estoque.' },
@@ -197,17 +167,35 @@ export async function PUT(
       }
     }
 
-    // Validar quantidade mínima se fornecida
-    let qtdMinima = undefined;
-    if (quantidade_minima !== undefined && quantidade_minima !== null) {
-      const qtdMinValidation = validateNumber(quantidade_minima, 'Quantidade mínima', 0, quantidadeValidation.value!);
-      if (!qtdMinValidation.valid) {
+    // Validar unidade se fornecida
+    if (unidade) {
+      const unidadeValidation = validateStringLength(unidade, 'Unidade', 1, 20);
+      if (!unidadeValidation.valid) {
         return NextResponse.json(
-          { error: qtdMinValidation.error },
+          { error: unidadeValidation.error },
           { status: 400 }
         );
       }
-      qtdMinima = qtdMinValidation.value;
+    }
+
+    // Validar quantidade mínima se fornecida
+    // Se quantidade_minima for null explicitamente, remover do banco
+    // Se for undefined, manter valor atual
+    let qtdMinima: number | null | undefined = undefined;
+    if (quantidade_minima !== undefined) {
+      if (quantidade_minima === null) {
+        // Explicitamente null = remover campo
+        qtdMinima = null;
+      } else {
+        const qtdMinValidation = validateNumber(quantidade_minima, 'Quantidade mínima', 0, quantidadeValidation.value!);
+        if (!qtdMinValidation.valid) {
+          return NextResponse.json(
+            { error: qtdMinValidation.error },
+            { status: 400 }
+          );
+        }
+        qtdMinima = qtdMinValidation.value;
+      }
     }
 
     // Conectar ao MongoDB
@@ -252,7 +240,7 @@ export async function PUT(
       nome: nome.trim(),
       descricao: descricao?.trim() || '',
       quantidade: quantidadeValidation.value!,
-      unidade: unidade || 'un',
+      unidade: (unidade || 'un').trim(),
       categoria: categoria?.trim() || '',
       fornecedor: fornecedor?.trim() || '',
       preco: preco !== undefined && preco !== null ? Number(preco) : 0,
@@ -260,9 +248,13 @@ export async function PUT(
       atualizadoEm: new Date(),
     };
 
-    // Incluir quantidade_minima se fornecida
+    // Incluir quantidade_minima se fornecida ou remover se null
     if (qtdMinima !== undefined) {
-      atualizacao.quantidade_minima = qtdMinima;
+      if (qtdMinima === null) {
+        atualizacao.quantidade_minima = null; // Remove campo
+      } else {
+        atualizacao.quantidade_minima = qtdMinima;
+      }
     }
 
     await collection.updateOne(
@@ -310,29 +302,14 @@ export async function DELETE(
       );
     }
     
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Token não fornecido' },
-        { status: 401 }
-      );
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      );
-    }
-
-    // Verificar se tem permissão editarEstoque E login
-    const hasPermission = await hasEstoqueEdicaoPermission(payload.userId);
+    // Verificar se tem permissão editarEstoque (não desloga, apenas bloqueia)
+    const hasPermission = await verifyEditarEstoquePermission(loginCheck.userId!);
     if (!hasPermission) {
       return NextResponse.json(
         { error: 'Você não possui permissão para adicionar ou remover itens do estoque.' },

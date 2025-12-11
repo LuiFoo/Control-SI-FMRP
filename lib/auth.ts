@@ -40,17 +40,23 @@ export function validateEmail(email: string): boolean {
  * Mantida apenas para compatibilidade.
  */
 export function isAdmin(payload: TokenPayload | null): boolean {
-  if (!payload) return false;
+  if (!payload || !payload.permissao) return false;
   
   // Se permissao é string JSON, tentar fazer parse
   try {
-    const permissaoObj = JSON.parse(payload.permissao);
-    if (typeof permissaoObj === 'object' && permissaoObj !== null) {
-      return permissaoObj.login === true && permissaoObj.editarEstoque === true;
+    if (typeof payload.permissao === 'string') {
+      const permissaoObj = JSON.parse(payload.permissao);
+      if (typeof permissaoObj === 'object' && permissaoObj !== null) {
+        return permissaoObj.login === true && permissaoObj.editarEstoque === true;
+      }
+      // Se não for JSON válido, verificar se é string 'admin' (compatibilidade)
+      return payload.permissao === 'admin';
     }
-  } catch {
+  } catch (error) {
     // Se não for JSON, verificar se é string 'admin' (compatibilidade)
-    return payload.permissao === 'admin';
+    if (typeof payload.permissao === 'string') {
+      return payload.permissao === 'admin';
+    }
   }
   
   return false;
@@ -76,7 +82,11 @@ export async function hasLoginPermission(userId: string): Promise<boolean> {
     
     // Verificar se permissao é um objeto
     if (typeof user.permissao === 'object' && user.permissao !== null) {
-      const permissao = user.permissao as { login?: boolean };
+      const permissao = user.permissao as { login?: boolean; isAdmin?: boolean };
+      // Se for admin master, tem permissão de login
+      if (permissao.isAdmin === true) {
+        return true;
+      }
       // Verificar se tem login === true
       return permissao.login === true;
     }
@@ -113,7 +123,11 @@ export async function hasEstoqueEdicaoPermission(userId: string): Promise<boolea
     
     // Verificar se permissao é um objeto
     if (typeof user.permissao === 'object' && user.permissao !== null) {
-      const permissao = user.permissao as { login?: boolean; editarEstoque?: boolean };
+      const permissao = user.permissao as { login?: boolean; editarEstoque?: boolean; isAdmin?: boolean };
+      // Se for admin master, tem todas as permissões
+      if (permissao.isAdmin === true) {
+        return true;
+      }
       // Verificar se tem editarEstoque === true E login === true
       const hasEditarEstoque = permissao.editarEstoque === true;
       const hasLogin = permissao.login === true;

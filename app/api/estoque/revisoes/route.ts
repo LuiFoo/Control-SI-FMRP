@@ -1,25 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { isValidObjectId } from '@/lib/utils';
 import { validateMonth, validateYear, validateDate } from '@/lib/validations';
+import { verifyLoginPermission } from '@/lib/auth-middleware';
 
 export async function POST(request: NextRequest) {
   try {
-    // Obter token do header Authorization ou cookie
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-    
-    if (!token) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
     let body;
@@ -40,6 +31,49 @@ export async function POST(request: NextRequest) {
         { error: 'Campo itens é obrigatório e deve ser um array' },
         { status: 400 }
       );
+    }
+
+    // Validar que o array não está vazio
+    if (itens.length === 0) {
+      return NextResponse.json(
+        { error: 'O array de itens não pode estar vazio' },
+        { status: 400 }
+      );
+    }
+
+    // Validar estrutura básica dos itens
+    for (let i = 0; i < itens.length; i++) {
+      const item = itens[i];
+      if (!item || typeof item !== 'object') {
+        return NextResponse.json(
+          { error: `Item no índice ${i} é inválido` },
+          { status: 400 }
+        );
+      }
+      if (!item.item_id || typeof item.item_id !== 'string') {
+        return NextResponse.json(
+          { error: `Item no índice ${i} deve ter um item_id válido` },
+          { status: 400 }
+        );
+      }
+      if (!item.nome_item || typeof item.nome_item !== 'string') {
+        return NextResponse.json(
+          { error: `Item no índice ${i} deve ter um nome_item válido` },
+          { status: 400 }
+        );
+      }
+      if (typeof item.sistema !== 'number' || item.sistema < 0) {
+        return NextResponse.json(
+          { error: `Item no índice ${i} deve ter um sistema válido (número >= 0)` },
+          { status: 400 }
+        );
+      }
+      if (item.contado !== null && (typeof item.contado !== 'number' || item.contado < 0)) {
+        return NextResponse.json(
+          { error: `Item no índice ${i} deve ter um contado válido (número >= 0 ou null)` },
+          { status: 400 }
+        );
+      }
     }
 
     // Validar mês
@@ -88,17 +122,42 @@ export async function POST(request: NextRequest) {
     const client = await clientPromise;
     const db = client.db('fmrp');
 
-    // Garantir que itens seja um array válido
+    // Garantir que itens seja um array válido e normalizar os dados
     const itensArray = Array.isArray(itens) ? itens : [];
+    
+    // Normalizar itens: garantir que contado e sistema sejam números válidos
+    const itensNormalizados = itensArray.map((item: any) => {
+      // Garantir que contado seja um número ou null
+      let contado = null;
+      if (item.contado !== null && item.contado !== undefined) {
+        const contadoNum = Number(item.contado);
+        contado = isNaN(contadoNum) ? null : contadoNum;
+      }
+      
+      // Garantir que sistema seja um número
+      let sistema = 0;
+      if (item.sistema !== null && item.sistema !== undefined) {
+        const sistemaNum = Number(item.sistema);
+        sistema = isNaN(sistemaNum) ? 0 : sistemaNum;
+      }
+      
+      return {
+        item_id: item.item_id || '',
+        nome_item: item.nome_item || '',
+        sistema: sistema,
+        contado: contado,
+        status: item.status || null,
+      };
+    });
     
     const revisao = {
       mes: mesValidation.value!,
       ano: anoValidation.value!,
       data_inicio: dataInicioValidation.value!,
       data_fim: dataFimValidation.value!,
-      usuario: payload.username,
+      usuario: loginCheck.username!,
       status: status || 'finalizada',
-      itens: itensArray,
+      itens: itensNormalizados,
       criado_em: new Date(),
     };
 
@@ -121,19 +180,10 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Obter token do header Authorization ou cookie
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-    
-    if (!token) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
     const client = await clientPromise;

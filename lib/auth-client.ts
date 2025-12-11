@@ -28,6 +28,9 @@ export function isAuthenticated(): boolean {
 export async function verifyToken(): Promise<boolean> {
   const token = getToken();
   if (!token) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
     return false;
   }
 
@@ -38,8 +41,32 @@ export async function verifyToken(): Promise<boolean> {
       },
     });
 
-    return response.ok;
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      // Se a resposta indicar que deve deslogar, remover token e redirecionar
+      if (data.shouldLogout) {
+        removeToken();
+        // Redirecionar para login imediatamente
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        return false;
+      }
+      // Se não tiver shouldLogout mas ainda assim deu erro, também deslogar por segurança
+      removeToken();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+      return false;
+    }
+
+    return true;
   } catch (error) {
+    // Em caso de erro, também deslogar por segurança
+    removeToken();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
     return false;
   }
 }

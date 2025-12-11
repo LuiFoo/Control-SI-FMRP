@@ -3,10 +3,17 @@ import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
 import { isValidObjectId } from '@/lib/utils';
+import { verifyLoginPermission } from '@/lib/auth-middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    // Obter token do header Authorization ou cookie
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
+    }
+
+    // Obter token para verificação adicional
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.startsWith('Bearer ') 
       ? authHeader.substring(7)
@@ -14,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     if (!token) {
       return NextResponse.json(
-        { error: 'Token não fornecido', isAdmin: false },
+        { error: 'Token não fornecido', isAdmin: false, shouldLogout: true },
         { status: 401 }
       );
     }
@@ -23,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     if (!payload) {
       return NextResponse.json(
-        { error: 'Token inválido ou expirado', isAdmin: false },
+        { error: 'Token inválido ou expirado', isAdmin: false, shouldLogout: true },
         { status: 401 }
       );
     }
@@ -31,7 +38,7 @@ export async function GET(request: NextRequest) {
     // Validar ObjectId
     if (!isValidObjectId(payload.userId)) {
       return NextResponse.json(
-        { error: 'ID de usuário inválido', isAdmin: false },
+        { error: 'ID de usuário inválido', isAdmin: false, shouldLogout: true },
         { status: 400 }
       );
     }
@@ -42,7 +49,7 @@ export async function GET(request: NextRequest) {
     const collection = db.collection('usuarios');
 
     // Verificar se o token do banco corresponde e se ainda está dentro do limite
-    const user = await collection.findOne({ _id: new ObjectId(payload.userId) });
+    const user = await collection.findOne({ _id: new ObjectId(loginCheck.userId!) });
     
     if (!user) {
       return NextResponse.json(
@@ -78,7 +85,7 @@ export async function GET(request: NextRequest) {
 
     // Atualizar campo logout para 2 horas no futuro
     await collection.updateOne(
-      { _id: new ObjectId(payload.userId) },
+      { _id: new ObjectId(loginCheck.userId!) },
       {
         $set: {
           logout: dataLimite,
@@ -87,16 +94,36 @@ export async function GET(request: NextRequest) {
     );
 
     // Verificar permissões
-    let isAdmin = false;
+    let isAdmin = false; // Administrador master
     let hasEditarEstoque = false;
     
     if (typeof user.permissao === 'object' && user.permissao !== null) {
-      const permissao = user.permissao as { login?: boolean; editarEstoque?: boolean };
-      isAdmin = permissao.login === true && permissao.editarEstoque === true; // Admin tem ambas
-      hasEditarEstoque = permissao.editarEstoque === true;
+      const permissao = user.permissao as { login?: boolean; editarEstoque?: boolean; isAdmin?: boolean };
+      // Se for admin master, tem todas as permissões
+      if (permissao.isAdmin === true) {
+        isAdmin = true;
+        hasEditarEstoque = true;
+      } else {
+        // Verificar permissões normais
+        // Admin normal precisa ter ambas as permissões
+        isAdmin = permissao.login === true && permissao.editarEstoque === true;
+        hasEditarEstoque = permissao.editarEstoque === true;
+      }
     } else if (typeof user.permissao === 'string') {
+      // Compatibilidade com estrutura antiga
       isAdmin = user.permissao === 'admin';
       hasEditarEstoque = user.permissao === 'admin';
+    }
+
+    // Garantir estrutura de permissão
+    let permissao = user.permissao;
+    if (typeof permissao !== 'object' || permissao === null) {
+      permissao = { login: false, editarEstoque: false, isAdmin: false };
+    } else {
+      // Garantir que isAdmin existe no objeto
+      if (!('isAdmin' in permissao)) {
+        permissao = { ...permissao, isAdmin: false };
+      }
     }
 
     return NextResponse.json(
@@ -105,9 +132,9 @@ export async function GET(request: NextRequest) {
         isAdmin: isAdmin,
         hasEditarEstoque: hasEditarEstoque,
         user: {
-          id: payload.userId,
-          username: payload.username,
-          permissao: user.permissao || { login: false, editarEstoque: false },
+          id: loginCheck.userId!,
+          username: loginCheck.username!,
+          permissao: permissao,
         }
       },
       { status: 200 }

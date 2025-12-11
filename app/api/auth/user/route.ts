@@ -3,37 +3,15 @@ import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
 import { isValidObjectId } from '@/lib/utils';
+import { verifyLoginPermission } from '@/lib/auth-middleware';
 
 // GET - Buscar dados do usuário logado (incluindo foto)
 export async function GET(request: NextRequest) {
   try {
-    // Obter token do header Authorization ou cookie
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Token não fornecido' },
-        { status: 401 }
-      );
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      );
-    }
-
-    // Validar ObjectId
-    if (!isValidObjectId(payload.userId)) {
-      return NextResponse.json(
-        { error: 'ID de usuário inválido' },
-        { status: 400 }
-      );
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
     // Conectar ao MongoDB
@@ -42,7 +20,7 @@ export async function GET(request: NextRequest) {
     const collection = db.collection('usuarios');
 
     // Buscar usuário
-    const user = await collection.findOne({ _id: new ObjectId(payload.userId) });
+    const user = await collection.findOne({ _id: new ObjectId(loginCheck.userId!) });
 
     if (!user) {
       return NextResponse.json(
@@ -67,11 +45,37 @@ export async function GET(request: NextRequest) {
       const nomeParte = email.split('@')[0];
       if (nomeParte && nomeParte.length > 0) {
         inicial = nomeParte[0].toUpperCase();
-        // Salvar inicial no banco para próxima vez
-        await collection.updateOne(
+        // Salvar inicial no banco para próxima vez (async, não bloquear resposta)
+        collection.updateOne(
           { _id: user._id },
           { $set: { inicial: inicial } }
-        );
+        ).catch(err => {
+          console.error('Erro ao salvar inicial:', err);
+          // Não falhar a requisição se não conseguir salvar inicial
+        });
+      } else {
+        // Fallback se não houver parte antes do @
+        inicial = '?';
+      }
+    }
+    
+    // Garantir que inicial sempre tenha um valor válido
+    if (!inicial || inicial.trim() === '') {
+      if (user.username && user.username.length > 0) {
+        inicial = user.username[0].toUpperCase();
+      } else {
+        inicial = '?';
+      }
+    }
+
+    // Garantir estrutura de permissão
+    let permissao = user.permissao;
+    if (typeof permissao !== 'object' || permissao === null) {
+      permissao = { login: false, editarEstoque: false, isAdmin: false };
+    } else {
+      // Garantir que isAdmin existe no objeto
+      if (!('isAdmin' in permissao)) {
+        permissao = { ...permissao, isAdmin: false };
       }
     }
 
@@ -80,7 +84,7 @@ export async function GET(request: NextRequest) {
         user: {
           id: user._id.toString(),
           username: user.username,
-          permissao: user.permissao || { login: false, editarEstoque: false },
+          permissao: permissao,
           inicial: inicial || user.username[0]?.toUpperCase() || '?',
         }
       },

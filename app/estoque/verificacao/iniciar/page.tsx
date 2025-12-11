@@ -88,7 +88,11 @@ export default function IniciarVerificacaoPage() {
   };
 
   const handleEstaCerto = () => {
-    const contado = parseInt(quantidadeContada);
+    const contado = parseInt(quantidadeContada, 10);
+    if (isNaN(contado)) {
+      alert('Por favor, digite uma quantidade válida.');
+      return;
+    }
     if (contado === itemAtual.quantidade) {
       const novaRevisao = [...revisao];
       const itemAtualizado = {
@@ -99,17 +103,21 @@ export default function IniciarVerificacaoPage() {
       novaRevisao[itemAtualIndex] = itemAtualizado;
       setRevisao(novaRevisao);
       revisaoRef.current = novaRevisao;
-      // Aguardar um pouco para garantir que o estado seja atualizado
-      setTimeout(() => {
+      // Usar requestAnimationFrame ao invés de setTimeout para melhor performance
+      requestAnimationFrame(() => {
         avancarItem();
-      }, 100);
+      });
     } else {
       alert('A quantidade contada deve ser igual à quantidade no sistema para marcar como "Está certo".');
     }
   };
 
   const handleEstaErrado = () => {
-    const contado = parseInt(quantidadeContada) || 0;
+    const contado = parseInt(quantidadeContada, 10);
+    if (isNaN(contado)) {
+      alert('Por favor, digite uma quantidade válida.');
+      return;
+    }
     const novaRevisao = [...revisao];
     const itemAtualizado = {
       ...itemRevisaoAtual,
@@ -119,10 +127,10 @@ export default function IniciarVerificacaoPage() {
       novaRevisao[itemAtualIndex] = itemAtualizado;
       setRevisao(novaRevisao);
       revisaoRef.current = novaRevisao;
-      // Aguardar um pouco para garantir que o estado seja atualizado
-      setTimeout(() => {
+      // Usar requestAnimationFrame ao invés de setTimeout para melhor performance
+      requestAnimationFrame(() => {
         avancarItem();
-      }, 100);
+      });
   };
 
   const avancarItem = () => {
@@ -130,10 +138,10 @@ export default function IniciarVerificacaoPage() {
     if (itemAtualIndex < itens.length - 1) {
       setItemAtualIndex(itemAtualIndex + 1);
     } else {
-      // Finalizou todos os itens - usar setTimeout para garantir que o estado foi atualizado
-      setTimeout(() => {
+      // Finalizou todos os itens - usar requestAnimationFrame para garantir que o estado foi atualizado
+      requestAnimationFrame(() => {
         finalizarRevisao();
-      }, 200);
+      });
     }
   };
 

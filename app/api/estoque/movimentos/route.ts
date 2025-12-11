@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
-import { verifyToken, hasEstoqueEdicaoPermission, hasLoginPermission } from '@/lib/auth';
 import { isValidObjectId } from '@/lib/utils';
 import { validateNumber, validateDate } from '@/lib/validations';
+import { verifyLoginPermission, verifyEditarEstoquePermission } from '@/lib/auth-middleware';
 
 export async function GET(request: NextRequest) {
   try {
-    // Obter token do header Authorization ou cookie
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-    
-    if (!token) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
     // Qualquer usuário autenticado pode visualizar movimentações
@@ -50,19 +41,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Obter token do header Authorization ou cookie
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-    
-    if (!token) {
-      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
     let body;
@@ -99,26 +81,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validar quantidade
+    const quantidadeValidation = validateNumber(quantidade, 'Quantidade', 0, 1000000);
+    if (!quantidadeValidation.valid) {
+      return NextResponse.json(
+        { error: quantidadeValidation.error },
+        { status: 400 }
+      );
+    }
+    const quantidadeValidada = quantidadeValidation.value!;
+
     // Verificar permissões baseado no tipo
     if (tipo === 'entrada') {
-      // Para ENTRADA: precisa de editarEstoque: true E login: true
-      const hasPermission = await hasEstoqueEdicaoPermission(payload.userId);
+      // Para ENTRADA: precisa de editarEstoque: true E login: true (não desloga, apenas bloqueia)
+      const hasPermission = await verifyEditarEstoquePermission(loginCheck.userId!);
       if (!hasPermission) {
         return NextResponse.json(
           { error: 'Você não possui permissão para adicionar itens ao estoque. É necessário ter permissão "editarEstoque" e "login".' },
           { status: 403 }
         );
       }
-    } else if (tipo === 'saida') {
-      // Para SAÍDA: precisa apenas de login: true
-      const hasLogin = await hasLoginPermission(payload.userId);
-      if (!hasLogin) {
-        return NextResponse.json(
-          { error: 'Você não possui permissão para remover itens do estoque. É necessário ter permissão "login".' },
-          { status: 403 }
-        );
-      }
     }
+    // Para SAÍDA: apenas precisa de login: true (já verificado acima)
 
     const client = await clientPromise;
     const db = client.db('fmrp');
@@ -138,8 +122,8 @@ export async function POST(request: NextRequest) {
     
     // Atualizar quantidade no estoque
     const novaQuantidade = tipo === 'entrada' 
-      ? quantidadeAtual + quantidade
-      : quantidadeAtual - quantidade;
+      ? quantidadeAtual + quantidadeValidada
+      : quantidadeAtual - quantidadeValidada;
 
     if (novaQuantidade < 0) {
       return NextResponse.json(
@@ -184,27 +168,30 @@ export async function POST(request: NextRequest) {
       dataMovimento = new Date();
     }
     
+    // Garantir que itemId seja ObjectId para consistência no banco
+    const itemIdObjectId = new ObjectId(itemId);
+    
     const movimento = {
       tipo,
-      itemId,
+      itemId: itemIdObjectId, // Salvar como ObjectId no banco
       itemNome: item.nome,
-      quantidade,
+      quantidade: quantidadeValidada,
       data: dataMovimento,
       responsavel: responsavel || null,
       setor: setor || null,
       observacoes: observacoes || null,
       numeroChamado: numeroChamado || null,
-      usuarioId: payload.userId,
-      usuarioNome: payload.username,
+      usuarioId: loginCheck.userId!,
+      usuarioNome: loginCheck.username!,
     };
 
     const result = await movimentacoesCollection.insertOne(movimento);
 
-    // Retornar movimento com _id convertido para string
+    // Retornar movimento com _id e itemId convertidos para string
     const movimentoRetornado = {
       ...movimento,
       _id: result.insertedId.toString(),
-      itemId: typeof movimento.itemId === 'string' ? movimento.itemId : movimento.itemId.toString(),
+      itemId: itemIdObjectId.toString(), // Converter para string na resposta
       data: dataMovimento.toISOString(),
     };
 

@@ -1,30 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
-import { verifyToken, hasEstoqueEdicaoPermission } from '@/lib/auth';
+import { verifyLoginPermission, verifyEditarEstoquePermission } from '@/lib/auth-middleware';
 
 // GET - Listar todos os itens de estoque
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Token não fornecido' },
-        { status: 401 }
-      );
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      );
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
     // Qualquer usuário autenticado pode visualizar itens do estoque
@@ -60,29 +45,14 @@ export async function GET(request: NextRequest) {
 // POST - Criar novo item de estoque
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') 
-      ? authHeader.substring(7)
-      : request.cookies.get('token')?.value;
-
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Token não fornecido' },
-        { status: 401 }
-      );
+    // Verificar permissão de login (desloga se não tiver)
+    const loginCheck = await verifyLoginPermission(request);
+    if (!loginCheck.valid) {
+      return loginCheck.response!;
     }
 
-    const payload = verifyToken(token);
-    if (!payload) {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      );
-    }
-
-    // Verificar se tem permissão editarEstoque E login
-    const hasPermission = await hasEstoqueEdicaoPermission(payload.userId);
+    // Verificar se tem permissão editarEstoque (não desloga, apenas bloqueia)
+    const hasPermission = await verifyEditarEstoquePermission(loginCheck.userId!);
     if (!hasPermission) {
       return NextResponse.json(
         { error: 'Você não possui permissão para adicionar ou remover itens do estoque.' },
@@ -101,6 +71,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { nome, descricao, quantidade, unidade, categoria, fornecedor, preco, localizacao, quantidade_minima } = body;
+
+    // Validar unidade se fornecida
+    if (unidade) {
+      const unidadeValidation = validateStringLength(unidade, 'Unidade', 1, 20);
+      if (!unidadeValidation.valid) {
+        return NextResponse.json(
+          { error: unidadeValidation.error },
+          { status: 400 }
+        );
+      }
+    }
 
     // Validações
     const nomeValidation = validateStringLength(nome, 'Nome', 1, 200);
@@ -172,16 +153,10 @@ export async function POST(request: NextRequest) {
 
     // Validar quantidade mínima se fornecida
     if (quantidade_minima !== undefined && quantidade_minima !== null) {
-      const qtdMin = Number(quantidade_minima);
-      if (isNaN(qtdMin) || qtdMin < 0) {
+      const qtdMinValidation = validateNumber(quantidade_minima, 'Quantidade mínima', 0, quantidadeValidation.value!);
+      if (!qtdMinValidation.valid) {
         return NextResponse.json(
-          { error: 'Quantidade mínima deve ser um número positivo ou zero' },
-          { status: 400 }
-        );
-      }
-      if (qtdMin > quantidade) {
-        return NextResponse.json(
-          { error: 'Quantidade mínima não pode ser maior que a quantidade inicial' },
+          { error: qtdMinValidation.error },
           { status: 400 }
         );
       }
@@ -222,7 +197,7 @@ export async function POST(request: NextRequest) {
       descricao: descricao?.trim() || '',
       quantidade: quantidadeValidation.value!,
       quantidade_minima: qtdMinima,
-      unidade: unidade || 'un',
+      unidade: (unidade || 'un').trim(),
       categoria: categoria?.trim() || '',
       fornecedor: fornecedor?.trim() || '',
       preco: preco !== undefined && preco !== null ? Number(preco) : 0,
