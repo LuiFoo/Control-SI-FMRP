@@ -59,7 +59,7 @@ export default function DashboardEstoque() {
       const token = getToken();
       
       // Carregar estatísticas e movimentos
-      const [itensRes, movimentosRes] = await Promise.all([
+      const [itensRes, movimentosRes] = await Promise.allSettled([
         fetch('/api/estoque', {
           headers: { 'Authorization': `Bearer ${token}` },
         }),
@@ -68,14 +68,16 @@ export default function DashboardEstoque() {
         }),
       ]);
 
-      if (itensRes.ok) {
-        const data = await itensRes.json();
+      if (itensRes.status === 'fulfilled' && itensRes.value.ok) {
+        const data = await itensRes.value.json();
         const itens: ItemEstoque[] = data.itens || [];
         
         // Calcular estatísticas
         const totalItens = itens.length; // Contar número de itens únicos, não somar quantidades
         const baixoEstoque = itens.filter((item: ItemEstoque) => 
-          item.quantidade_minima && item.quantidade <= item.quantidade_minima
+          item.quantidade_minima !== undefined && 
+          item.quantidade_minima !== null && 
+          item.quantidade <= item.quantidade_minima
         );
         const zerados = itens.filter((item: ItemEstoque) => item.quantidade === 0);
         
@@ -90,8 +92,8 @@ export default function DashboardEstoque() {
         setItensZerados(zerados);
       }
 
-      if (movimentosRes.ok) {
-        const data = await movimentosRes.json();
+      if (movimentosRes.status === 'fulfilled' && movimentosRes.value.ok) {
+        const data = await movimentosRes.value.json();
         const movs: Movimento[] = data.movimentos || [];
         setMovimentos(movs.slice(0, 10)); // Últimos 10
         
@@ -99,13 +101,25 @@ export default function DashboardEstoque() {
         const agora = new Date();
         const seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
         
-        const entradas = movs.filter(m => 
-          m.tipo === 'entrada' && new Date(m.data) >= seteDiasAtras
-        ).length;
+        const entradas = movs.filter(m => {
+          if (m.tipo !== 'entrada') return false;
+          try {
+            const dataMov = new Date(m.data);
+            return !isNaN(dataMov.getTime()) && dataMov >= seteDiasAtras;
+          } catch {
+            return false;
+          }
+        }).length;
         
-        const saidas = movs.filter(m => 
-          m.tipo === 'saida' && new Date(m.data) >= seteDiasAtras
-        ).length;
+        const saidas = movs.filter(m => {
+          if (m.tipo !== 'saida') return false;
+          try {
+            const dataMov = new Date(m.data);
+            return !isNaN(dataMov.getTime()) && dataMov >= seteDiasAtras;
+          } catch {
+            return false;
+          }
+        }).length;
         
         setEstatisticas(prev => ({
           ...prev,
