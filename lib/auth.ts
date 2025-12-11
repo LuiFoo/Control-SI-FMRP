@@ -36,9 +36,24 @@ export function validateEmail(email: string): boolean {
 
 /**
  * Verifica se o payload do token tem permissão de admin
+ * NOTA: Esta função está obsoleta. Use hasEstoqueEdicaoPermission() que verifica no banco.
+ * Mantida apenas para compatibilidade.
  */
 export function isAdmin(payload: TokenPayload | null): boolean {
-  return payload?.permissao === 'admin';
+  if (!payload) return false;
+  
+  // Se permissao é string JSON, tentar fazer parse
+  try {
+    const permissaoObj = JSON.parse(payload.permissao);
+    if (typeof permissaoObj === 'object' && permissaoObj !== null) {
+      return permissaoObj.login === true && permissaoObj.editarEstoque === true;
+    }
+  } catch {
+    // Se não for JSON, verificar se é string 'admin' (compatibilidade)
+    return payload.permissao === 'admin';
+  }
+  
+  return false;
 }
 
 /**
@@ -61,7 +76,7 @@ export async function hasLoginPermission(userId: string): Promise<boolean> {
     
     // Verificar se permissao é um objeto
     if (typeof user.permissao === 'object' && user.permissao !== null) {
-      const permissao = user.permissao as any;
+      const permissao = user.permissao as { login?: boolean };
       // Verificar se tem login === true
       return permissao.login === true;
     }
@@ -98,7 +113,7 @@ export async function hasEstoqueEdicaoPermission(userId: string): Promise<boolea
     
     // Verificar se permissao é um objeto
     if (typeof user.permissao === 'object' && user.permissao !== null) {
-      const permissao = user.permissao as any;
+      const permissao = user.permissao as { login?: boolean; editarEstoque?: boolean };
       // Verificar se tem editarEstoque === true E login === true
       const hasEditarEstoque = permissao.editarEstoque === true;
       const hasLogin = permissao.login === true;

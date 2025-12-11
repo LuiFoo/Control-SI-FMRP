@@ -48,7 +48,7 @@ function VisualizarContent() {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Revisão carregada:', data.revisao);
+        // Revisão carregada com sucesso
         setRevisao(data.revisao);
       }
     } catch (error) {
@@ -62,10 +62,6 @@ function VisualizarContent() {
   const itensArray = Array.isArray(revisao?.itens) ? revisao.itens : [];
   const itensCertos = itensArray.filter(i => i && i.status === 'certo');
   const itensErrados = itensArray.filter(i => i && i.status === 'errado');
-  
-  console.log('Itens array:', itensArray);
-  console.log('Itens certos:', itensCertos);
-  console.log('Itens errados:', itensErrados);
 
   const gerarPDF = (): jsPDF => {
     if (!revisao) throw new Error('Revisão não encontrada');

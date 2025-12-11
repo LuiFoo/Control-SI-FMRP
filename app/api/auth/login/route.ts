@@ -186,7 +186,9 @@ export async function POST(request: NextRequest) {
     // Exemplo: luiz@fmrp.usp.br -> "L"
     const email = user.username.toLowerCase().trim();
     const nomeParte = email.split('@')[0]; // Pega a parte antes do @
-    const inicial = nomeParte[0].toUpperCase(); // Primeira letra em maiúscula
+    const inicial = nomeParte && nomeParte.length > 0 
+      ? nomeParte[0].toUpperCase() 
+      : '?'; // Fallback se não houver parte antes do @
     
     // Salvar inicial no banco (não precisa de URL, vamos usar a inicial diretamente)
     await collection.updateOne(
@@ -196,10 +198,18 @@ export async function POST(request: NextRequest) {
 
     // Gerar novo token se necessário
     if (precisaGerarNovoToken) {
+      // Converter permissao para string se for objeto
+      let permissaoString = 'user';
+      if (typeof user.permissao === 'object' && user.permissao !== null) {
+        permissaoString = JSON.stringify(user.permissao);
+      } else if (typeof user.permissao === 'string') {
+        permissaoString = user.permissao;
+      }
+      
       token = generateToken({
         userId: user._id.toString(),
         username: user.username,
-        permissao: user.permissao || 'user',
+        permissao: permissaoString,
       });
     }
 
@@ -233,7 +243,8 @@ export async function POST(request: NextRequest) {
         user: {
           id: user._id.toString(),
           username: user.username,
-          permissao: user.permissao || 'user',
+          permissao: user.permissao || { login: false, editarEstoque: false },
+          inicial: inicial,
         }
       },
       { status: 200 }

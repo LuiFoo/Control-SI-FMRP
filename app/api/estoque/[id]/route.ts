@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken, hasEstoqueEdicaoPermission } from '@/lib/auth';
+import { isValidObjectId } from '@/lib/utils';
+import { validateStringLength, validateNumber } from '@/lib/validations';
 
 // GET - Buscar item específico
 export async function GET(
@@ -10,6 +12,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    
+    // Validar ObjectId
+    if (!isValidObjectId(id)) {
+      return NextResponse.json(
+        { error: 'ID inválido' },
+        { status: 400 }
+      );
+    }
     
     // Verificar autenticação
     const authHeader = request.headers.get('authorization');
@@ -48,8 +58,16 @@ export async function GET(
       );
     }
 
+    // Converter ObjectId para string e formatar datas
+    const itemFormatado = {
+      ...item,
+      _id: item._id.toString(),
+      criadoEm: item.criadoEm instanceof Date ? item.criadoEm.toISOString() : item.criadoEm,
+      atualizadoEm: item.atualizadoEm instanceof Date ? item.atualizadoEm.toISOString() : item.atualizadoEm,
+    };
+
     return NextResponse.json(
-      { item },
+      { item: itemFormatado },
       { status: 200 }
     );
   } catch (error) {
@@ -99,22 +117,97 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
-    const { nome, descricao, quantidade, unidade, categoria, fornecedor, preco, localizacao } = body;
-
-    // Validações
-    if (!nome || quantidade === undefined) {
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
       return NextResponse.json(
-        { error: 'Nome e quantidade são obrigatórios' },
+        { error: 'Formato JSON inválido' },
         { status: 400 }
       );
     }
 
-    if (typeof quantidade !== 'number' || quantidade < 0) {
+    const { nome, descricao, quantidade, unidade, categoria, fornecedor, preco, localizacao, quantidade_minima } = body;
+
+    // Validações
+    const nomeValidation = validateStringLength(nome, 'Nome', 1, 200);
+    if (!nomeValidation.valid) {
       return NextResponse.json(
-        { error: 'Quantidade deve ser um número positivo' },
+        { error: nomeValidation.error },
         { status: 400 }
       );
+    }
+
+    const quantidadeValidation = validateNumber(quantidade, 'Quantidade', 0, 1000000);
+    if (!quantidadeValidation.valid) {
+      return NextResponse.json(
+        { error: quantidadeValidation.error },
+        { status: 400 }
+      );
+    }
+
+    // Validar outros campos opcionais
+    if (descricao) {
+      const descValidation = validateStringLength(descricao, 'Descrição', 0, 1000);
+      if (!descValidation.valid) {
+        return NextResponse.json(
+          { error: descValidation.error },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (categoria) {
+      const catValidation = validateStringLength(categoria, 'Categoria', 0, 100);
+      if (!catValidation.valid) {
+        return NextResponse.json(
+          { error: catValidation.error },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (fornecedor) {
+      const fornValidation = validateStringLength(fornecedor, 'Fornecedor', 0, 200);
+      if (!fornValidation.valid) {
+        return NextResponse.json(
+          { error: fornValidation.error },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (localizacao) {
+      const locValidation = validateStringLength(localizacao, 'Localização', 0, 200);
+      if (!locValidation.valid) {
+        return NextResponse.json(
+          { error: locValidation.error },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (preco !== undefined && preco !== null) {
+      const precoValidation = validateNumber(preco, 'Preço', 0, 999999999.99);
+      if (!precoValidation.valid) {
+        return NextResponse.json(
+          { error: precoValidation.error },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validar quantidade mínima se fornecida
+    let qtdMinima = undefined;
+    if (quantidade_minima !== undefined && quantidade_minima !== null) {
+      const qtdMinValidation = validateNumber(quantidade_minima, 'Quantidade mínima', 0, quantidadeValidation.value!);
+      if (!qtdMinValidation.valid) {
+        return NextResponse.json(
+          { error: qtdMinValidation.error },
+          { status: 400 }
+        );
+      }
+      qtdMinima = qtdMinValidation.value;
     }
 
     // Conectar ao MongoDB
@@ -144,27 +237,51 @@ export async function PUT(
     }
 
     // Atualizar item
-    const atualizacao = {
+    const atualizacao: {
+      nome: string;
+      descricao: string;
+      quantidade: number;
+      unidade: string;
+      categoria: string;
+      fornecedor: string;
+      preco: number;
+      localizacao: string;
+      atualizadoEm: Date;
+      quantidade_minima?: number;
+    } = {
       nome: nome.trim(),
       descricao: descricao?.trim() || '',
-      quantidade: quantidade,
+      quantidade: quantidadeValidation.value!,
       unidade: unidade || 'un',
       categoria: categoria?.trim() || '',
       fornecedor: fornecedor?.trim() || '',
-      preco: preco || 0,
+      preco: preco !== undefined && preco !== null ? Number(preco) : 0,
       localizacao: localizacao?.trim() || '',
       atualizadoEm: new Date(),
     };
+
+    // Incluir quantidade_minima se fornecida
+    if (qtdMinima !== undefined) {
+      atualizacao.quantidade_minima = qtdMinima;
+    }
 
     await collection.updateOne(
       { _id: new ObjectId(id) },
       { $set: atualizacao }
     );
 
+    // Buscar item atualizado para retornar
+    const itemAtualizado = await collection.findOne({ _id: new ObjectId(id) });
+
     return NextResponse.json(
       { 
         message: 'Item atualizado com sucesso',
-        item: { ...atualizacao, _id: id }
+        item: itemAtualizado ? {
+          ...itemAtualizado,
+          _id: itemAtualizado._id.toString(),
+          criadoEm: itemAtualizado.criadoEm instanceof Date ? itemAtualizado.criadoEm.toISOString() : itemAtualizado.criadoEm,
+          atualizadoEm: itemAtualizado.atualizadoEm instanceof Date ? itemAtualizado.atualizadoEm.toISOString() : itemAtualizado.atualizadoEm,
+        } : { ...atualizacao, _id: id }
       },
       { status: 200 }
     );
@@ -184,6 +301,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    
+    // Validar ObjectId
+    if (!isValidObjectId(id)) {
+      return NextResponse.json(
+        { error: 'ID inválido' },
+        { status: 400 }
+      );
+    }
     
     // Verificar autenticação
     const authHeader = request.headers.get('authorization');

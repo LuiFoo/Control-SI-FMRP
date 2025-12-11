@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import clientPromise from '@/lib/mongodb';
 import { validateEmail } from '@/lib/auth';
+import { validatePassword, validateEmailLength } from '@/lib/validations';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +16,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validar tamanho do email
+    const emailValidation = validateEmailLength(username);
+    if (!emailValidation.valid) {
+      return NextResponse.json(
+        { error: emailValidation.error },
+        { status: 400 }
+      );
+    }
+
     // Validar se é email @fmrp.usp.br
     if (!validateEmail(username)) {
       return NextResponse.json(
@@ -23,10 +33,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar tamanho da senha
-    if (password.length < 6) {
+    // Validar senha
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
       return NextResponse.json(
-        { error: 'A senha deve ter no mínimo 6 caracteres' },
+        { error: passwordValidation.error },
         { status: 400 }
       );
     }

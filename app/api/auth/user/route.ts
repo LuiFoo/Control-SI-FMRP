@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
+import { isValidObjectId } from '@/lib/utils';
 
 // GET - Buscar dados do usuário logado (incluindo foto)
 export async function GET(request: NextRequest) {
@@ -27,6 +28,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Validar ObjectId
+    if (!isValidObjectId(payload.userId)) {
+      return NextResponse.json(
+        { error: 'ID de usuário inválido' },
+        { status: 400 }
+      );
+    }
+
     // Conectar ao MongoDB
     const client = await clientPromise;
     const db = client.db('fmrp');
@@ -42,12 +51,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Garantir que username existe
+    if (!user.username) {
+      console.error('Usuário sem username:', user._id);
+      return NextResponse.json(
+        { error: 'Dados do usuário incompletos' },
+        { status: 500 }
+      );
+    }
+
     // Gerar inicial do nome se não tiver
     let inicial = user.inicial;
-    if (!inicial) {
+    if (!inicial && user.username) {
       const email = user.username.toLowerCase().trim();
       const nomeParte = email.split('@')[0];
-      inicial = nomeParte[0].toUpperCase();
+      if (nomeParte && nomeParte.length > 0) {
+        inicial = nomeParte[0].toUpperCase();
+        // Salvar inicial no banco para próxima vez
+        await collection.updateOne(
+          { _id: user._id },
+          { $set: { inicial: inicial } }
+        );
+      }
     }
 
     return NextResponse.json(
@@ -55,8 +80,8 @@ export async function GET(request: NextRequest) {
         user: {
           id: user._id.toString(),
           username: user.username,
-          permissao: user.permissao || 'user',
-          inicial: inicial,
+          permissao: user.permissao || { login: false, editarEstoque: false },
+          inicial: inicial || user.username[0]?.toUpperCase() || '?',
         }
       },
       { status: 200 }

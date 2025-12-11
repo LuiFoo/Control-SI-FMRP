@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
+import { isValidObjectId } from '@/lib/utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +25,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Token inválido ou expirado', isAdmin: false },
         { status: 401 }
+      );
+    }
+
+    // Validar ObjectId
+    if (!isValidObjectId(payload.userId)) {
+      return NextResponse.json(
+        { error: 'ID de usuário inválido', isAdmin: false },
+        { status: 400 }
       );
     }
 
@@ -82,7 +91,7 @@ export async function GET(request: NextRequest) {
     let hasEditarEstoque = false;
     
     if (typeof user.permissao === 'object' && user.permissao !== null) {
-      const permissao = user.permissao as any;
+      const permissao = user.permissao as { login?: boolean; editarEstoque?: boolean };
       isAdmin = permissao.login === true && permissao.editarEstoque === true; // Admin tem ambas
       hasEditarEstoque = permissao.editarEstoque === true;
     } else if (typeof user.permissao === 'string') {
@@ -98,7 +107,7 @@ export async function GET(request: NextRequest) {
         user: {
           id: payload.userId,
           username: payload.username,
-          permissao: payload.permissao,
+          permissao: user.permissao || { login: false, editarEstoque: false },
         }
       },
       { status: 200 }

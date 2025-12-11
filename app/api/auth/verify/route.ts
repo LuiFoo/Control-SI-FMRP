@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
+import { isValidObjectId } from '@/lib/utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +25,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Token inválido ou expirado' },
         { status: 401 }
+      );
+    }
+
+    // Validar ObjectId
+    if (!isValidObjectId(payload.userId)) {
+      return NextResponse.json(
+        { error: 'ID de usuário inválido' },
+        { status: 400 }
       );
     }
 
@@ -77,7 +86,14 @@ export async function GET(request: NextRequest) {
 
 
     // Verificar se é admin
-    const isAdmin = payload.permissao === 'admin';
+    // Como permissao no token é string JSON, precisamos verificar no banco
+    let isAdmin = false;
+    if (typeof user.permissao === 'object' && user.permissao !== null) {
+      const permissao = user.permissao as { login?: boolean; editarEstoque?: boolean };
+      isAdmin = permissao.login === true && permissao.editarEstoque === true;
+    } else if (typeof user.permissao === 'string') {
+      isAdmin = user.permissao === 'admin';
+    }
 
     return NextResponse.json(
       { 
@@ -86,7 +102,7 @@ export async function GET(request: NextRequest) {
         user: {
           id: payload.userId,
           username: payload.username,
-          permissao: payload.permissao || 'user',
+          permissao: user.permissao || { login: false, editarEstoque: false },
         }
       },
       { status: 200 }

@@ -28,29 +28,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Formato JSON inválido' },
+        { status: 400 }
+      );
+    }
+
     const { nome, categoria, unidade, quantidade, quantidade_minima, observacoes } = body;
 
     // Validações
-    if (!nome || !nome.trim()) {
+    const nomeValidation = validateStringLength(nome, 'Nome', 1, 200);
+    if (!nomeValidation.valid) {
       return NextResponse.json(
-        { error: 'Nome do item é obrigatório' },
+        { error: nomeValidation.error },
         { status: 400 }
       );
     }
 
-    if (!categoria || !categoria.trim()) {
+    const categoriaValidation = validateStringLength(categoria, 'Categoria', 1, 100);
+    if (!categoriaValidation.valid) {
       return NextResponse.json(
-        { error: 'Categoria é obrigatória para itens novos' },
+        { error: categoriaValidation.error },
         { status: 400 }
       );
     }
 
-    if (!quantidade || quantidade <= 0) {
+    const quantidadeValidation = validateNumber(quantidade, 'Quantidade', 0, 1000000, false);
+    if (!quantidadeValidation.valid) {
       return NextResponse.json(
-        { error: 'Quantidade deve ser maior que zero' },
+        { error: quantidadeValidation.error },
         { status: 400 }
       );
+    }
+
+    // Validar quantidade mínima se fornecida
+    let qtdMinima = 0;
+    if (quantidade_minima !== undefined && quantidade_minima !== null) {
+      const qtdMinValidation = validateNumber(quantidade_minima, 'Quantidade mínima', 0, quantidadeValidation.value!);
+      if (!qtdMinValidation.valid) {
+        return NextResponse.json(
+          { error: qtdMinValidation.error },
+          { status: 400 }
+        );
+      }
+      qtdMinima = qtdMinValidation.value!;
     }
 
     const client = await clientPromise;
@@ -75,7 +100,7 @@ export async function POST(request: NextRequest) {
       nome: nome.trim(),
       categoria: categoria.trim(),
       quantidade: quantidade,
-      quantidade_minima: quantidade_minima !== undefined && quantidade_minima !== null ? Number(quantidade_minima) : 0,
+      quantidade_minima: qtdMinima,
       unidade: unidade || 'un',
       descricao: '',
       fornecedor: '',

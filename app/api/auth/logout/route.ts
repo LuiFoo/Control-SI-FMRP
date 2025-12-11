@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import { verifyToken } from '@/lib/auth';
+import { isValidObjectId } from '@/lib/utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +28,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validar ObjectId
+    if (!isValidObjectId(payload.userId)) {
+      return NextResponse.json(
+        { error: 'ID de usuário inválido' },
+        { status: 400 }
+      );
+    }
+
     // Conectar ao MongoDB
     const client = await clientPromise;
     const db = client.db('fmrp');
@@ -43,7 +52,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    console.log('✅ Logout realizado - data limite atualizada para agora (token invalidado) para usuário:', payload.username);
+    // Logout realizado com sucesso
 
     // Criar resposta e remover cookie
     const response = NextResponse.json(

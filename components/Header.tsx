@@ -9,7 +9,7 @@ import { useState, useEffect, useRef } from 'react';
 interface UserData {
   id: string;
   username: string;
-  permissao: string;
+  permissao: string | { login?: boolean; editarEstoque?: boolean };
   inicial?: string;
 }
 
@@ -27,7 +27,10 @@ export default function Header() {
     const loadUser = async () => {
       try {
         const token = getToken();
-        if (!token) return;
+        if (!token) {
+          console.warn('Token não encontrado no Header');
+          return;
+        }
 
         const response = await fetch('/api/auth/user', {
           headers: {
@@ -37,7 +40,14 @@ export default function Header() {
 
         if (response.ok) {
           const data = await response.json();
-          setUser(data.user);
+          if (data.user) {
+            setUser(data.user);
+          } else {
+            console.error('Resposta sem dados do usuário:', data);
+          }
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Erro ao buscar usuário:', response.status, errorData);
         }
       } catch (error) {
         console.error('Erro ao carregar usuário:', error);
