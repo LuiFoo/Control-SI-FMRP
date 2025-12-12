@@ -131,6 +131,7 @@ export async function POST(request: NextRequest) {
 
     // Validar quantidade atual do item
     const quantidadeAtual = typeof item.quantidade === 'number' ? item.quantidade : 0;
+    const quantidadeMinimaAtual = typeof item.quantidade_minima === 'number' ? item.quantidade_minima : undefined;
     
     // Atualizar quantidade no estoque
     const novaQuantidade = tipo === 'entrada' 
@@ -208,9 +209,14 @@ export async function POST(request: NextRequest) {
       // Se falhar ao criar movimento, tentar reverter a atualização do estoque
       console.error('Erro ao criar movimento, tentando reverter atualização do estoque:', movimentoError);
       try {
+        // Reverter quantidade e quantidade_minima para valores originais
+        const revertData: { quantidade: number; quantidade_minima?: number } = { quantidade: quantidadeAtual };
+        if (quantidadeMinimaAtual !== undefined) {
+          revertData.quantidade_minima = quantidadeMinimaAtual;
+        }
         await estoqueCollection.updateOne(
           { _id: new ObjectId(itemId) },
-          { $set: { quantidade: quantidadeAtual } }
+          { $set: revertData }
         );
       } catch (revertError) {
         console.error('Erro ao reverter atualização do estoque:', revertError);

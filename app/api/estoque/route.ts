@@ -155,17 +155,6 @@ export async function POST(request: NextRequest) {
       precoValidado = precoValidation.value!;
     }
 
-    // Validar quantidade mínima se fornecida
-    if (quantidade_minima !== undefined && quantidade_minima !== null) {
-      const qtdMinValidation = validateNumber(quantidade_minima, 'Quantidade mínima', 0, quantidadeValidation.value!);
-      if (!qtdMinValidation.valid) {
-        return NextResponse.json(
-          { error: qtdMinValidation.error },
-          { status: 400 }
-        );
-      }
-    }
-
     // Conectar ao MongoDB
     const client = await clientPromise;
     const db = client.db('fmrp');
@@ -182,7 +171,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validar quantidade mínima
+    // Validar quantidade mínima se fornecida
     let qtdMinima = 0;
     if (quantidade_minima !== undefined && quantidade_minima !== null) {
       const qtdMinValidation = validateNumber(quantidade_minima, 'Quantidade mínima', 0, quantidadeValidation.value!);
