@@ -248,10 +248,16 @@ export async function PUT(
       atualizadoEm: new Date(),
     };
 
+    // Preparar operação de atualização
+    const updateOperation: { $set: typeof atualizacao; $unset?: { quantidade_minima: string } } = {
+      $set: atualizacao
+    };
+
     // Incluir quantidade_minima se fornecida ou remover se null
     if (qtdMinima !== undefined) {
       if (qtdMinima === null) {
-        atualizacao.quantidade_minima = null; // Remove campo
+        // Remover campo usando $unset
+        updateOperation.$unset = { quantidade_minima: '' };
       } else {
         atualizacao.quantidade_minima = qtdMinima;
       }
@@ -259,7 +265,7 @@ export async function PUT(
 
     await collection.updateOne(
       { _id: new ObjectId(id) },
-      { $set: atualizacao }
+      updateOperation
     );
 
     // Buscar item atualizado para retornar
