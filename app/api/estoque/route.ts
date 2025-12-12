@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
+import { validateStringLength, validateNumber } from '@/lib/validations';
 import { verifyLoginPermission, verifyEditarEstoquePermission } from '@/lib/auth-middleware';
 
 // GET - Listar todos os itens de estoque

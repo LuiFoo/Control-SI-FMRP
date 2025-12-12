@@ -24,13 +24,25 @@ export async function GET(request: NextRequest) {
       .toArray();
 
     // Converter ObjectId para string e garantir formato correto
-    const movimentosFormatados = movimentos.map(mov => ({
-      ...mov,
-      _id: mov._id.toString(),
-      itemId: mov.itemId?.toString() || mov.itemId,
-      // Garantir que data seja serializada corretamente
-      data: mov.data instanceof Date ? mov.data.toISOString() : mov.data,
-    }));
+    const movimentosFormatados = movimentos.map(mov => {
+      // Converter itemId para string de forma segura
+      let itemIdString: string | null = null;
+      if (mov.itemId) {
+        if (typeof mov.itemId === 'object' && 'toString' in mov.itemId) {
+          itemIdString = mov.itemId.toString();
+        } else if (typeof mov.itemId === 'string') {
+          itemIdString = mov.itemId;
+        }
+      }
+      
+      return {
+        ...mov,
+        _id: mov._id.toString(),
+        itemId: itemIdString,
+        // Garantir que data seja serializada corretamente
+        data: mov.data instanceof Date ? mov.data.toISOString() : mov.data,
+      };
+    });
 
     return NextResponse.json({ movimentos: movimentosFormatados }, { status: 200 });
   } catch (error) {

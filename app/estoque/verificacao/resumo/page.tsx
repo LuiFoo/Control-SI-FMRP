@@ -8,6 +8,13 @@ import Breadcrumb from '@/components/Breadcrumb';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// Interface para estender jsPDF com lastAutoTable
+interface jsPDFWithAutoTable extends jsPDF {
+  lastAutoTable?: {
+    finalY?: number;
+  };
+}
+
 interface ItemRevisao {
   item_id: string;
   nome_item: string;
@@ -161,7 +168,7 @@ function ResumoContent() {
     });
     
     // Rodapé com totais
-    const finalY = (doc as any).lastAutoTable?.finalY || 55;
+    const finalY = (doc as jsPDFWithAutoTable).lastAutoTable?.finalY || 55;
     let yPos = finalY + 8;
     
     if (itensFiltrados.length > 0) {

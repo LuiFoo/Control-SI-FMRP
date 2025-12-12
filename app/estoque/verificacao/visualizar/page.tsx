@@ -8,6 +8,13 @@ import Breadcrumb from '@/components/Breadcrumb';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// Interface para estender jsPDF com lastAutoTable
+interface jsPDFWithAutoTable extends jsPDF {
+  lastAutoTable?: {
+    finalY?: number;
+  };
+}
+
 interface ItemRevisao {
   item_id: string;
   nome_item: string;
@@ -66,10 +73,18 @@ function VisualizarContent() {
         const data = await response.json();
         if (data.revisao) {
           // Garantir que todos os itens tenham dados válidos
+          interface ItemRevisaoInput {
+            item_id?: string;
+            nome_item?: string;
+            sistema?: number | string | null;
+            contado?: number | string | null;
+            status?: 'certo' | 'errado' | null;
+          }
+          
           const revisaoFormatada = {
             ...data.revisao,
             itens: Array.isArray(data.revisao.itens) 
-              ? data.revisao.itens.map((item: any) => {
+              ? data.revisao.itens.map((item: ItemRevisaoInput) => {
                   // Normalizar contado - preservar o valor se existir, converter para número
                   let contado: number | null = null;
                   if (item.contado !== null && item.contado !== undefined && item.contado !== '') {
@@ -231,7 +246,7 @@ function VisualizarContent() {
         margin: { top: 50, left: 15, right: 15 },
       });
       
-      const yAfterHeader = (doc as any).lastAutoTable?.finalY || 50;
+      const yAfterHeader = (doc as jsPDFWithAutoTable).lastAutoTable?.finalY || 50;
       
       autoTable(doc, {
         head: [tableHeadersCertos],
@@ -270,7 +285,7 @@ function VisualizarContent() {
     
     // Gerar tabela de itens errados
     if (tableDataErrados.length > 0) {
-      const yAfterCertos = (doc as any).lastAutoTable?.finalY || 50;
+      const yAfterCertos = (doc as jsPDFWithAutoTable).lastAutoTable?.finalY || 50;
       
       autoTable(doc, {
         head: [['Itens com Diferença']],
@@ -288,7 +303,7 @@ function VisualizarContent() {
         margin: { top: yAfterCertos + 10, left: 15, right: 15 },
       });
       
-      const yAfterHeaderErrados = (doc as any).lastAutoTable?.finalY || yAfterCertos + 10;
+      const yAfterHeaderErrados = (doc as jsPDFWithAutoTable).lastAutoTable?.finalY || yAfterCertos + 10;
       
       autoTable(doc, {
         head: [tableHeadersErrados],
@@ -312,7 +327,7 @@ function VisualizarContent() {
     }
     
     // Rodapé com totais
-    const finalY = (doc as any).lastAutoTable?.finalY || 55;
+    const finalY = (doc as jsPDFWithAutoTable).lastAutoTable?.finalY || 55;
     let yPos = finalY + 8;
     
     if (itensArray.length > 0) {

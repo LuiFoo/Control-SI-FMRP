@@ -7,6 +7,13 @@ import Breadcrumb from '@/components/Breadcrumb';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// Interface para estender jsPDF com lastAutoTable
+interface jsPDFWithAutoTable extends jsPDF {
+  lastAutoTable?: {
+    finalY?: number;
+  };
+}
+
 interface Movimento {
   _id: string;
   tipo: 'entrada' | 'saida';
@@ -281,7 +288,8 @@ export default function RelatoriosPage() {
     doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 190, 20, { align: 'right' });
     
     // Preparar dados da tabela
-    let tableData: any[] = [];
+    type TableRow = (string | number)[];
+    let tableData: TableRow[] = [];
     let tableHeaders: string[] = [];
     
     if (tipoRelatorio === 'baixo-estoque') {
@@ -373,7 +381,7 @@ export default function RelatoriosPage() {
     });
     
     // Rodapé com totais
-    const finalY = (doc as any).lastAutoTable?.finalY || 55;
+    const finalY = (doc as jsPDFWithAutoTable).lastAutoTable?.finalY || 55;
     let yPos = finalY + 8;
     
     if (tipoRelatorio !== 'baixo-estoque' && movimentosFiltrados.length > 0) {
@@ -522,7 +530,7 @@ export default function RelatoriosPage() {
                 <label className="block text-xs font-medium text-gray-700 mb-2">Período</label>
                 <select
                   value={periodo}
-                  onChange={(e) => setPeriodo(e.target.value as any)}
+                  onChange={(e) => setPeriodo(e.target.value as 'hoje' | '7dias' | '30dias' | 'mes' | 'ano' | 'personalizado')}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#09624b] focus:border-[#09624b]"
                 >
                   <option value="hoje">Hoje</option>

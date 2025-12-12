@@ -125,8 +125,17 @@ export async function POST(request: NextRequest) {
     // Garantir que itens seja um array válido e normalizar os dados
     const itensArray = Array.isArray(itens) ? itens : [];
     
+    // Interface para item de revisão recebido
+    interface ItemRevisaoInput {
+      item_id?: string;
+      nome_item?: string;
+      sistema?: number | string | null;
+      contado?: number | string | null;
+      status?: 'certo' | 'errado' | null;
+    }
+    
     // Normalizar itens: garantir que contado e sistema sejam números válidos
-    const itensNormalizados = itensArray.map((item: any) => {
+    const itensNormalizados = itensArray.map((item: ItemRevisaoInput) => {
       // Garantir que contado seja um número ou null
       let contado = null;
       if (item.contado !== null && item.contado !== undefined) {

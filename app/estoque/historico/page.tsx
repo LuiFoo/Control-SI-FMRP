@@ -100,7 +100,7 @@ export default function HistoricoPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
                 <select
                   value={filtroTipo}
-                  onChange={(e) => setFiltroTipo(e.target.value as any)}
+                  onChange={(e) => setFiltroTipo(e.target.value as 'todos' | 'entrada' | 'saida')}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#09624b]"
                 >
                   <option value="todos">Todos</option>
@@ -112,7 +112,7 @@ export default function HistoricoPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
                 <select
                   value={filtroData}
-                  onChange={(e) => setFiltroData(e.target.value as any)}
+                  onChange={(e) => setFiltroData(e.target.value as 'todos' | 'hoje' | 'semana' | 'mes')}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#09624b]"
                 >
                   <option value="todos">Todos</option>
