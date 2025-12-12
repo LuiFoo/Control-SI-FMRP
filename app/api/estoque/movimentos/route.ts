@@ -159,12 +159,6 @@ export async function POST(request: NextRequest) {
       updateData.quantidade_minima = qtdMinValidation.value!;
     }
 
-    await estoqueCollection.updateOne(
-      { _id: new ObjectId(itemId) },
-      { $set: updateData }
-    );
-
-    // Criar registro de movimentação
     // Validar e usar a data fornecida ou a data atual
     let dataMovimento: Date;
     if (data) {
@@ -183,6 +177,7 @@ export async function POST(request: NextRequest) {
     // Garantir que itemId seja ObjectId para consistência no banco
     const itemIdObjectId = new ObjectId(itemId);
     
+    // Preparar movimento
     const movimento = {
       tipo,
       itemId: itemIdObjectId, // Salvar como ObjectId no banco
@@ -197,7 +192,34 @@ export async function POST(request: NextRequest) {
       usuarioNome: loginCheck.username!,
     };
 
-    const result = await movimentacoesCollection.insertOne(movimento);
+    // Atualizar estoque primeiro
+    await estoqueCollection.updateOne(
+      { _id: new ObjectId(itemId) },
+      { $set: updateData }
+    );
+
+    // Criar registro de movimentação
+    // NOTA: Se esta operação falhar, o estoque já foi atualizado.
+    // Em produção, considere usar transações do MongoDB para garantir atomicidade.
+    let result;
+    try {
+      result = await movimentacoesCollection.insertOne(movimento);
+    } catch (movimentoError) {
+      // Se falhar ao criar movimento, tentar reverter a atualização do estoque
+      console.error('Erro ao criar movimento, tentando reverter atualização do estoque:', movimentoError);
+      try {
+        await estoqueCollection.updateOne(
+          { _id: new ObjectId(itemId) },
+          { $set: { quantidade: quantidadeAtual } }
+        );
+      } catch (revertError) {
+        console.error('Erro ao reverter atualização do estoque:', revertError);
+      }
+      return NextResponse.json(
+        { error: 'Erro ao registrar movimentação. O estoque foi revertido.' },
+        { status: 500 }
+      );
+    }
 
     // Retornar movimento com _id e itemId convertidos para string
     const movimentoRetornado = {

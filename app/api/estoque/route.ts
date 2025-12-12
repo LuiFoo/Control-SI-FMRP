@@ -142,6 +142,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validar preço se fornecido
+    let precoValidado = 0;
     if (preco !== undefined && preco !== null) {
       const precoValidation = validateNumber(preco, 'Preço', 0, 999999999.99);
       if (!precoValidation.valid) {
@@ -150,6 +152,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      precoValidado = precoValidation.value!;
     }
 
     // Validar quantidade mínima se fornecida
@@ -201,7 +204,7 @@ export async function POST(request: NextRequest) {
       unidade: (unidade || 'un').trim(),
       categoria: categoria?.trim() || '',
       fornecedor: fornecedor?.trim() || '',
-      preco: preco !== undefined && preco !== null ? Number(preco) : 0,
+      preco: precoValidado,
       localizacao: localizacao?.trim() || '',
       criadoEm: new Date(),
       atualizadoEm: new Date(),

@@ -157,6 +157,8 @@ export async function PUT(
       }
     }
 
+    // Validar preço se fornecido
+    let precoValidado = 0;
     if (preco !== undefined && preco !== null) {
       const precoValidation = validateNumber(preco, 'Preço', 0, 999999999.99);
       if (!precoValidation.valid) {
@@ -165,6 +167,7 @@ export async function PUT(
           { status: 400 }
         );
       }
+      precoValidado = precoValidation.value!;
     }
 
     // Validar unidade se fornecida
@@ -243,7 +246,7 @@ export async function PUT(
       unidade: (unidade || 'un').trim(),
       categoria: categoria?.trim() || '',
       fornecedor: fornecedor?.trim() || '',
-      preco: preco !== undefined && preco !== null ? Number(preco) : 0,
+      preco: precoValidado,
       localizacao: localizacao?.trim() || '',
       atualizadoEm: new Date(),
     };
