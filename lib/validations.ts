@@ -78,7 +78,19 @@ export function validateDate(
     return { valid: false, error: `${fieldName} é obrigatório` };
   }
 
-  const date = new Date(value);
+  // Converter value para um tipo aceito por Date
+  let dateValue: string | number | Date;
+  
+  if (value instanceof Date) {
+    dateValue = value;
+  } else if (typeof value === 'string' || typeof value === 'number') {
+    dateValue = value;
+  } else {
+    // Tentar converter para string
+    dateValue = String(value);
+  }
+
+  const date = new Date(dateValue);
   
   if (isNaN(date.getTime())) {
     return { valid: false, error: `${fieldName} deve ser uma data válida` };

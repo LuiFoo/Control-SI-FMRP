@@ -166,6 +166,12 @@ export default function IniciarVerificacaoPage() {
       // Filtrar apenas itens que foram revisados (têm status definido)
       const itensRevisados = revisaoAtual.filter(item => item.status !== null && item.status !== undefined);
       
+      // Validar se há itens revisados
+      if (itensRevisados.length === 0) {
+        alert('Não é possível finalizar uma revisão sem itens revisados. Por favor, revise pelo menos um item.');
+        return;
+      }
+      
       const revisaoCompleta = {
         mes,
         ano,

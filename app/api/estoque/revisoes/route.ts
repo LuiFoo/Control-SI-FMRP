@@ -62,17 +62,24 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (typeof item.sistema !== 'number' || item.sistema < 0) {
+      // Validar sistema - aceitar number ou string que pode ser convertida para number
+      const sistemaNum = typeof item.sistema === 'number' ? item.sistema : Number(item.sistema);
+      if (isNaN(sistemaNum) || sistemaNum < 0) {
         return NextResponse.json(
           { error: `Item no índice ${i} deve ter um sistema válido (número >= 0)` },
           { status: 400 }
         );
       }
-      if (item.contado !== null && (typeof item.contado !== 'number' || item.contado < 0)) {
-        return NextResponse.json(
-          { error: `Item no índice ${i} deve ter um contado válido (número >= 0 ou null)` },
-          { status: 400 }
-        );
+      
+      // Validar contado - aceitar number, string que pode ser convertida, ou null
+      if (item.contado !== null && item.contado !== undefined) {
+        const contadoNum = typeof item.contado === 'number' ? item.contado : Number(item.contado);
+        if (isNaN(contadoNum) || contadoNum < 0) {
+          return NextResponse.json(
+            { error: `Item no índice ${i} deve ter um contado válido (número >= 0 ou null)` },
+            { status: 400 }
+          );
+        }
       }
     }
 
