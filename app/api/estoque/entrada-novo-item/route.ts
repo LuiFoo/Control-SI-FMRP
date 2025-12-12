@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const quantidadeValidation = validateNumber(quantidade, 'Quantidade', 0, 1000000, false);
+    const quantidadeValidation = validateNumber(quantidade, 'Quantidade', 0, 1000000, true);
     if (!quantidadeValidation.valid) {
       return NextResponse.json(
         { error: quantidadeValidation.error },
@@ -113,6 +113,7 @@ export async function POST(request: NextRequest) {
       atualizadoEm: new Date(),
     };
 
+    // Criar item primeiro
     const result = await estoqueCollection.insertOne(novoItem);
     const itemId = result.insertedId;
 
@@ -131,7 +132,22 @@ export async function POST(request: NextRequest) {
       usuarioNome: loginCheck.username!,
     };
 
-    await movimentacoesCollection.insertOne(movimento);
+    // Criar movimento - se falhar, tentar remover o item criado
+    try {
+      await movimentacoesCollection.insertOne(movimento);
+    } catch (movimentoError) {
+      // Se falhar ao criar movimento, tentar remover o item criado
+      console.error('Erro ao criar movimento, tentando remover item criado:', movimentoError);
+      try {
+        await estoqueCollection.deleteOne({ _id: itemId });
+      } catch (deleteError) {
+        console.error('Erro ao remover item após falha no movimento:', deleteError);
+      }
+      return NextResponse.json(
+        { error: 'Erro ao registrar entrada. O item foi removido.' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
       {
