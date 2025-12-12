@@ -177,8 +177,6 @@ export async function POST(request: NextRequest) {
       criado_em: new Date(),
     };
 
-    // Removido console.log para produção
-
     const result = await db.collection('revisoes').insertOne(revisao);
 
     return NextResponse.json({
@@ -245,8 +243,6 @@ export async function GET(request: NextRequest) {
         itens: itensFormatados,
         criado_em: revisao.criado_em instanceof Date ? revisao.criado_em.toISOString() : revisao.criado_em,
       };
-
-      // Removidos console.logs para produção
 
       return NextResponse.json({ revisao: revisaoFormatada });
     } else {
